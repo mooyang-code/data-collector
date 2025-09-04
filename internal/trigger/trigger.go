@@ -14,14 +14,14 @@ import (
 
 // BaseTrigger 基础触发器实现
 type BaseTrigger struct {
-	id          string
-	triggerType model.TriggerType
-	name        string
-	status      model.TriggerStatus
-	mu          sync.RWMutex
-	ctx         context.Context
-	cancel      context.CancelFunc
-	startTime   time.Time
+	id           string
+	triggerType  model.TriggerType
+	name         string
+	status       model.TriggerStatus
+	mu           sync.RWMutex
+	ctx          context.Context
+	cancel       context.CancelFunc
+	startTime    time.Time
 	triggerCount int64
 	errorCount   int64
 	lastTrigger  time.Time
@@ -157,8 +157,6 @@ func (t *BaseTrigger) GetStatus() types.TriggerStatus {
 	status.LastTrigger = t.lastTrigger
 	return status
 }
-
-
 
 // executeTrigger 执行触发器回调
 func (t *BaseTrigger) executeTrigger() {

@@ -1,7 +1,8 @@
-// Package symbols 币安交易对采集器自注册（最好是中文注释！）
+// Package symbols 币安交易对采集器自注册
 package symbols
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -14,10 +15,10 @@ import (
 func init() {
 	// 注册现货交易对采集器
 	app.RegisterCollectorCreator("binance", "symbols", "spot", createBinanceSpotSymbolCollector)
-	
+
 	// 注册合约交易对采集器
 	app.RegisterCollectorCreator("binance", "symbols", "futures", createBinanceFuturesSymbolCollector)
-	
+
 	log.Info("币安交易对采集器注册完成")
 }
 
@@ -25,13 +26,15 @@ func init() {
 func createBinanceSpotSymbolCollector(appName, collectorName string, config *configs.Collector) (app.Collector, error) {
 	// 转换为币安交易对采集器配置
 	binanceConfig := &BinanceSymbolConfig{
-		Exchange:           "binance",
+		Exchange:          "binance",
 		BaseURL:           "https://api.binance.com", // 现货API地址
 		BufferSize:        1000,
 		EnableAutoRefresh: config.Schedule.EnableAutoRefresh,
 		RefreshInterval:   5 * time.Minute,
 		EnableFiltering:   len(config.Config.Filters) > 0,
-		AllowedQuotes:     config.Config.Filters,
+		SymbolFilter: SymbolFilterConfig{
+			AllowedQuoteAssets: config.Config.Filters,
+		},
 	}
 
 	// 解析触发间隔
@@ -50,9 +53,9 @@ func createBinanceSpotSymbolCollector(appName, collectorName string, config *con
 	// 包装为通用接口
 	wrapper := &BinanceSymbolCollectorWrapper{
 		collector:     collector,
-		id:           fmt.Sprintf("%s.%s", appName, collectorName),
+		id:            fmt.Sprintf("%s.%s", appName, collectorName),
 		collectorType: "binance.symbols.spot",
-		dataType:     config.DataType,
+		dataType:      config.DataType,
 	}
 
 	return wrapper, nil
@@ -62,13 +65,15 @@ func createBinanceSpotSymbolCollector(appName, collectorName string, config *con
 func createBinanceFuturesSymbolCollector(appName, collectorName string, config *configs.Collector) (app.Collector, error) {
 	// 转换为币安交易对采集器配置（合约版本）
 	binanceConfig := &BinanceSymbolConfig{
-		Exchange:           "binance",
+		Exchange:          "binance",
 		BaseURL:           "https://fapi.binance.com", // 合约API地址
 		BufferSize:        1000,
 		EnableAutoRefresh: config.Schedule.EnableAutoRefresh,
 		RefreshInterval:   5 * time.Minute,
 		EnableFiltering:   len(config.Config.Filters) > 0,
-		AllowedQuotes:     config.Config.Filters,
+		SymbolFilter: SymbolFilterConfig{
+			AllowedQuoteAssets: config.Config.Filters,
+		},
 	}
 
 	// 解析触发间隔
@@ -87,9 +92,9 @@ func createBinanceFuturesSymbolCollector(appName, collectorName string, config *
 	// 包装为通用接口
 	wrapper := &BinanceSymbolCollectorWrapper{
 		collector:     collector,
-		id:           fmt.Sprintf("%s.%s", appName, collectorName),
+		id:            fmt.Sprintf("%s.%s", appName, collectorName),
 		collectorType: "binance.symbols.futures",
-		dataType:     config.DataType,
+		dataType:      config.DataType,
 	}
 
 	return wrapper, nil
@@ -98,10 +103,10 @@ func createBinanceFuturesSymbolCollector(appName, collectorName string, config *
 // BinanceSymbolCollectorWrapper 币安交易对采集器包装器
 type BinanceSymbolCollectorWrapper struct {
 	collector     *BinanceSymbolCollector
-	id           string
+	id            string
 	collectorType string
-	dataType     string
-	running      bool
+	dataType      string
+	running       bool
 }
 
 // Initialize 初始化采集器

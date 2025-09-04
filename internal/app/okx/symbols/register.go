@@ -4,7 +4,6 @@ package symbols
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/mooyang-code/data-collector/configs"
 	"github.com/mooyang-code/data-collector/internal/app"

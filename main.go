@@ -11,6 +11,12 @@ import (
 	pb "github.com/mooyang-code/data-collector/proto/gen"
 	"trpc.group/trpc-go/trpc-go"
 	"trpc.group/trpc-go/trpc-go/log"
+
+	// 导入采集器包以触发自注册
+	_ "github.com/mooyang-code/data-collector/internal/app/binance/klines"
+	_ "github.com/mooyang-code/data-collector/internal/app/binance/symbols"
+	_ "github.com/mooyang-code/data-collector/internal/app/okx/klines"
+	_ "github.com/mooyang-code/data-collector/internal/app/okx/symbols"
 )
 
 // 命令行参数
@@ -22,6 +28,7 @@ func main() {
 	flag.Parse()
 	fmt.Println("=== 量化数据采集器 ===")
 	fmt.Printf("配置目录: %s\n", *configPath)
+
 
 	// 创建App工厂
 	appFactory := app.NewAppFactory()

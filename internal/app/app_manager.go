@@ -36,9 +36,6 @@ type AppManagerImpl struct {
 
 // NewAppManager 创建新的应用管理器
 func NewAppManager(factory AppFactory) AppManager {
-	// 初始化采集器注册
-	InitCollectors()
-
 	return &AppManagerImpl{
 		factory: factory,
 		apps:    make(map[string]App),
