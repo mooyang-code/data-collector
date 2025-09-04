@@ -1,0 +1,227 @@
+# 数据采集器配置文件
+
+# 系统配置
+system:
+  name: "data-collector"
+  version: "1.0.0"
+  environment: "dev"  # dev/test/prod
+  debug: true
+
+# 应用配置（一个交易所一个app）
+apps:
+  # Binance应用
+  binance:
+    name: "binance-app"
+    enabled: true
+
+    # 数据采集器配置
+    collectors:
+      # 现货交易对采集器
+      spot_symbols_collector:
+        name: "spot-symbols-collector"
+        enabled: true
+        dataType: "symbols"
+        marketType: "spot"        # 市场类型：现货
+        restBaseURL: "https://api.binance.com"  # 可覆盖baseConfig中的配置
+        schedule:
+          triggerInterval: "5m"    # 定时器触发周期
+          enableAutoRefresh: true  # 启用自动刷新
+          maxRetries: 3           # 最大重试次数
+          retryInterval: "30s"    # 重试间隔
+        config:
+          enablePersistence: true # 启用持久化
+          persistenceFile: "data/symbols_binance_spot.json"
+          filters:                # 过滤器
+            - "TRADING"           # 只要交易中的
+
+      # 合约交易对采集器
+      futures_symbols_collector:
+        name: "futures-symbols-collector"
+        enabled: true
+        dataType: "symbols"
+        marketType: "futures"     # 市场类型：合约
+        restBaseURL: "https://fapi.binance.com"  # 合约API地址
+        schedule:
+          triggerInterval: "5m"    # 定时器触发周期
+          enableAutoRefresh: true  # 启用自动刷新
+          maxRetries: 3           # 最大重试次数
+          retryInterval: "30s"    # 重试间隔
+        config:
+          enablePersistence: true # 启用持久化
+          persistenceFile: "data/symbols_binance_futures.json"
+          filters:                # 过滤器
+            - "TRADING"           # 只要交易中的
+
+      # 现货K线采集器
+      spot_klines_collector:
+        name: "spot-klines-collector"
+        enabled: true
+        dataType: "klines"
+        marketType: "spot"        # 市场类型：现货
+        restBaseURL: "https://api.binance.com"  # 可覆盖baseConfig中的配置
+        schedule:
+          triggerInterval: "1m"    # 定时器触发周期
+          enableRealtime: true     # 启用实时采集
+        config:
+          intervals:               # 订阅的周期
+            - "1m"
+            - "5m"
+            - "15m"
+            - "1h"
+            - "1d"
+          bufferSize: 1000         # 缓冲区大小
+          maxKlinesPerSymbol: 10000 # 每个交易对最大K线数
+          enableAggregation: true  # 启用聚合
+          enableGapDetection: true # 启用缺口检测
+          gapDetectionInterval: "5m" # 缺口检测间隔
+          enableBackfill: true     # 启用回补
+          backfillLookback: "24h"  # 回补回看时间
+
+          # 历史数据配置
+          history:
+            enable: true           # 启用历史数据获取
+            lookbackHours: 8       # 回看小时数
+            batchSize: 1000        # 批次大小
+            interval: "1h"         # 获取间隔
+
+      # 合约K线采集器
+      futures_klines_collector:
+        name: "futures-klines-collector"
+        enabled: true
+        dataType: "klines"
+        marketType: "futures"     # 市场类型：合约
+        restBaseURL: "https://fapi.binance.com"  # 合约API地址
+        schedule:
+          triggerInterval: "1m"    # 定时器触发周期
+          enableRealtime: true     # 启用实时采集
+        config:
+          intervals:               # 订阅的周期
+            - "1m"
+            - "5m"
+            - "15m"
+            - "1h"
+            - "1d"
+          bufferSize: 1000         # 缓冲区大小
+          maxKlinesPerSymbol: 10000 # 每个交易对最大K线数
+          enableAggregation: true  # 启用聚合
+          enableGapDetection: true # 启用缺口检测
+          gapDetectionInterval: "5m" # 缺口检测间隔
+          enableBackfill: true     # 启用回补
+          backfillLookback: "24h"  # 回补回看时间
+
+          # 历史数据配置
+          history:
+            enable: true           # 启用历史数据获取
+            lookbackHours: 8       # 回看小时数
+            batchSize: 1000        # 批次大小
+            interval: "1h"         # 获取间隔
+
+  # OKX应用（暂未实现）
+  okx:
+    name: "okx-app"
+    enabled: false
+    baseConfig:
+      restBaseURL: "https://www.okx.com"
+      wsBaseURL: "wss://ws.okx.com:8443/ws/v5/public"
+      logLevel: "info"
+
+    collectors:
+      spot_symbols_collector:
+        name: "spot-symbols-collector"
+        enabled: true
+        dataType: "symbols"
+        marketType: "spot"
+        schedule:
+          triggerInterval: "5m"
+          enableAutoRefresh: true
+
+      futures_symbols_collector:
+        name: "futures-symbols-collector"
+        enabled: true
+        dataType: "symbols"
+        marketType: "futures"
+        schedule:
+          triggerInterval: "5m"
+          enableAutoRefresh: true
+
+      spot_klines_collector:
+        name: "spot-klines-collector"
+        enabled: true
+        dataType: "klines"
+        marketType: "spot"
+        schedule:
+          triggerInterval: "1m"
+        config:
+          intervals: ["1m", "5m", "1h", "1d"]
+
+      futures_klines_collector:
+        name: "futures-klines-collector"
+        enabled: true
+        dataType: "klines"
+        marketType: "futures"
+        schedule:
+          triggerInterval: "1m"
+        config:
+          intervals: ["1m", "5m", "1h", "1d"]
+
+  # Bybit应用（暂未实现）
+  bybit:
+    name: "bybit-app"
+    enabled: false
+    baseConfig:
+      restBaseURL: "https://api.bybit.com"
+      wsBaseURL: "wss://stream.bybit.com/v5/public/spot"
+      logLevel: "info"
+
+    collectors:
+      spot_symbols_collector:
+        name: "spot-symbols-collector"
+        enabled: true
+        dataType: "symbols"
+        marketType: "spot"
+        schedule:
+          triggerInterval: "5m"
+          enableAutoRefresh: true
+
+      futures_symbols_collector:
+        name: "futures-symbols-collector"
+        enabled: true
+        dataType: "symbols"
+        marketType: "futures"
+        schedule:
+          triggerInterval: "5m"
+          enableAutoRefresh: true
+
+      spot_klines_collector:
+        name: "spot-klines-collector"
+        enabled: true
+        dataType: "klines"
+        marketType: "spot"
+        schedule:
+          triggerInterval: "1m"
+        config:
+          intervals: ["1m", "5m", "1h", "1d"]
+
+      futures_klines_collector:
+        name: "futures-klines-collector"
+        enabled: true
+        dataType: "klines"
+        marketType: "futures"
+        schedule:
+          triggerInterval: "1m"
+        config:
+          intervals: ["1m", "5m", "1h", "1d"]
+
+# 持久化配置
+persistence:
+  backend: "parquet"  # parquet
+
+  # Parquet配置
+  parquet:
+    basePath: "./data/parquet"
+    compression: "snappy"
+    rowGroupSize: 100000
+    pageSize: 8192
+    flushInterval: "1m"
+
+
