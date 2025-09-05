@@ -1,4 +1,4 @@
-// Package app 应用程序管理模块（最好是中文注释！）
+// Package app 应用程序管理模块
 package app
 
 import (
@@ -79,7 +79,6 @@ func (m *AppManagerImpl) Start(ctx context.Context) error {
 		}
 		log.Infof("应用启动成功: %s", id)
 	}
-
 	log.Info("应用管理器启动完成")
 	return nil
 }
@@ -158,7 +157,6 @@ func (m *AppManagerImpl) GetAllApps() []App {
 	for _, app := range m.apps {
 		apps = append(apps, app)
 	}
-
 	return apps
 }
 
@@ -225,10 +223,19 @@ func (m *AppManagerImpl) initializeAppsFromConfig() error {
 	for appName, appConfig := range enabledApps {
 		log.Infof("初始化应用: %s", appName)
 
+		// 检查应用是否在注册表中
+		registry := GetAppRegistry()
+		appType := appName // 默认使用应用名作为类型
+		if !registry.HasApp(appName) {
+			// 如果注册表中没有，使用默认类型
+			appType = "data-collector"
+			log.Warnf("应用 %s 未在注册表中找到，使用默认类型: %s", appName, appType)
+		}
+
 		// 转换配置格式
 		legacyConfig := &AppConfig{
 			ID:          appName,
-			Type:        "data-collector", // 默认类型
+			Type:        appType,
 			Name:        appConfig.Name,
 			Description: fmt.Sprintf("%s 数据采集应用", appName),
 			Enabled:     appConfig.Enabled,

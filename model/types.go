@@ -1,4 +1,4 @@
-// Package model 共享的数据结构定义（最好是中文注释！）
+// Package model 共享的数据结构定义
 package model
 
 import (
@@ -12,12 +12,12 @@ import (
 
 // AppStatus App状态结构
 type AppStatus struct {
-	State       AppState  `json:"state"`
-	Message     string    `json:"message"`
-	LastUpdate  time.Time `json:"last_update"`
-	StartTime   time.Time `json:"start_time"`
-	ErrorCount  int       `json:"error_count"`
-	LastError   string    `json:"last_error"`
+	State      AppState  `json:"state"`
+	Message    string    `json:"message"`
+	LastUpdate time.Time `json:"last_update"`
+	StartTime  time.Time `json:"start_time"`
+	ErrorCount int       `json:"error_count"`
+	LastError  string    `json:"last_error"`
 }
 
 // CollectorStatus 采集器状态结构
@@ -97,8 +97,8 @@ type StorageStats struct {
 	RecordCount int64                  `json:"record_count"`
 	StorageSize int64                  `json:"storage_size"`
 	LastWrite   time.Time              `json:"last_write"`
-	WriteRate   float64                `json:"write_rate"`   // 写入速率 (条/秒)
-	ErrorRate   float64                `json:"error_rate"`   // 错误率
+	WriteRate   float64                `json:"write_rate"` // 写入速率 (条/秒)
+	ErrorRate   float64                `json:"error_rate"` // 错误率
 	Extra       map[string]interface{} `json:"extra"`
 }
 

@@ -15,10 +15,29 @@ import (
 // init 函数在包被导入时自动执行，注册采集器创建器
 func init() {
 	// 注册现货K线采集器
-	app.RegisterCollectorCreator("binance", "klines", "spot", createBinanceSpotKlineCollector)
+	err := app.NewCollectorCreatorBuilder().
+		WithExchange("binance", "币安").
+		WithDataType("klines", "K线").
+		WithMarketType("spot", "现货").
+		WithDescription("采集币安现货市场的K线数据").
+		WithCreator(createBinanceSpotKlineCollector).
+		Register()
+	if err != nil {
+		log.Errorf("注册币安现货K线采集器失败: %v", err)
+	}
 
 	// 注册合约K线采集器
-	app.RegisterCollectorCreator("binance", "klines", "futures", createBinanceFuturesKlineCollector)
+	err = app.NewCollectorCreatorBuilder().
+		WithExchange("binance", "币安").
+		WithDataType("klines", "K线").
+		WithMarketType("futures", "合约").
+		WithDescription("采集币安合约市场的K线数据").
+		WithCreator(createBinanceFuturesKlineCollector).
+		Register()
+	if err != nil {
+		log.Errorf("注册币安合约K线采集器失败: %v", err)
+	}
+	
 	log.Info("币安K线采集器注册完成")
 }
 

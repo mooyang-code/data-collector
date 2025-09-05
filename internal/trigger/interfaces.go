@@ -1,4 +1,4 @@
-// Package trigger 触发器相关接口定义（最好是中文注释！）
+// Package trigger 触发器相关接口定义
 package trigger
 
 import (

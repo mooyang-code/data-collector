@@ -14,10 +14,28 @@ import (
 // init 函数在包被导入时自动执行，注册采集器创建器
 func init() {
 	// 注册现货交易对采集器
-	app.RegisterCollectorCreator("binance", "symbols", "spot", createBinanceSpotSymbolCollector)
+	err := app.NewCollectorCreatorBuilder().
+		WithExchange("binance", "币安").
+		WithDataType("symbols", "交易对").
+		WithMarketType("spot", "现货").
+		WithDescription("采集币安现货市场的交易对信息").
+		WithCreator(createBinanceSpotSymbolCollector).
+		Register()
+	if err != nil {
+		log.Errorf("注册币安现货交易对采集器失败: %v", err)
+	}
 
 	// 注册合约交易对采集器
-	app.RegisterCollectorCreator("binance", "symbols", "futures", createBinanceFuturesSymbolCollector)
+	err = app.NewCollectorCreatorBuilder().
+		WithExchange("binance", "币安").
+		WithDataType("symbols", "交易对").
+		WithMarketType("futures", "合约").
+		WithDescription("采集币安合约市场的交易对信息").
+		WithCreator(createBinanceFuturesSymbolCollector).
+		Register()
+	if err != nil {
+		log.Errorf("注册币安合约交易对采集器失败: %v", err)
+	}
 
 	log.Info("币安交易对采集器注册完成")
 }

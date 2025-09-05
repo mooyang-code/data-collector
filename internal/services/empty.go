@@ -1,4 +1,4 @@
-// Package services 数据采集器服务实现（最好是中文注释！）
+// Package services 数据采集器服务实现
 package services
 
 import (
@@ -21,9 +21,9 @@ func NewCollectorService() *CollectorServiceImpl {
 // Empty 空接口实现
 func (s *CollectorServiceImpl) Empty(ctx context.Context, req *pb.EmptyReq) (*pb.EmptyRsp, error) {
 	log.InfoContext(ctx, "收到Empty请求")
-	
+
 	// 这里可以添加您的业务逻辑
 	// 例如：健康检查、状态查询等
-	
+
 	return &pb.EmptyRsp{}, nil
 }

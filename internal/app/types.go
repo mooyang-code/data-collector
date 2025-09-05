@@ -1,4 +1,4 @@
-// Package app 应用类型定义（最好是中文注释！）
+// Package app 应用类型定义
 package app
 
 import (

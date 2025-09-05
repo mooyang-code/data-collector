@@ -1,4 +1,4 @@
-// Package model 共享的枚举类型定义（最好是中文注释！）
+// Package model 共享的枚举类型定义
 package model
 
 // DataType 数据类型枚举
@@ -52,11 +52,11 @@ const (
 type TriggerState string
 
 const (
-	TriggerStateUnknown  TriggerState = "unknown"  // 未知状态
-	TriggerStateIdle     TriggerState = "idle"     // 空闲状态
-	TriggerStateRunning  TriggerState = "running"  // 运行中
-	TriggerStateStopped  TriggerState = "stopped"  // 已停止
-	TriggerStateError    TriggerState = "error"    // 错误状态
+	TriggerStateUnknown TriggerState = "unknown" // 未知状态
+	TriggerStateIdle    TriggerState = "idle"    // 空闲状态
+	TriggerStateRunning TriggerState = "running" // 运行中
+	TriggerStateStopped TriggerState = "stopped" // 已停止
+	TriggerStateError   TriggerState = "error"   // 错误状态
 )
 
 // StorageType 存储类型枚举

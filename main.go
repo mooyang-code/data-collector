@@ -1,4 +1,4 @@
-// Package main 重构后的量化数据采集器主程序（最好是中文注释！）
+// Package main 重构后的量化数据采集器主程序
 package main
 
 import (
@@ -11,6 +11,10 @@ import (
 	pb "github.com/mooyang-code/data-collector/proto/gen"
 	"trpc.group/trpc-go/trpc-go"
 	"trpc.group/trpc-go/trpc-go/log"
+
+	// 导入app应用包以触发自注册
+	_ "github.com/mooyang-code/data-collector/internal/app/binance"
+	_ "github.com/mooyang-code/data-collector/internal/app/okx"
 
 	// 导入采集器包以触发自注册
 	_ "github.com/mooyang-code/data-collector/internal/app/binance/klines"
@@ -29,6 +33,8 @@ func main() {
 	fmt.Println("=== 量化数据采集器 ===")
 	fmt.Printf("配置目录: %s\n", *configPath)
 
+	// 初始化并打印注册信息
+	app.InitializeRegistries()
 
 	// 创建App工厂
 	appFactory := app.NewAppFactory()

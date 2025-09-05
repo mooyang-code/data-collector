@@ -1,4 +1,4 @@
-// Package app 应用实现（最好是中文注释！）
+// Package app 应用实现
 package app
 
 import (

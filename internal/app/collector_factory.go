@@ -1,4 +1,4 @@
-// Package app 采集器工厂实现（最好是中文注释！）
+// Package app 采集器工厂实现
 package app
 
 import (
@@ -26,7 +26,7 @@ func (f *CollectorFactoryImpl) CreateCollector(appName, collectorName string, co
 	if !ok {
 		return nil, fmt.Errorf("配置类型不正确")
 	}
-	
+
 	// 使用注册中心创建采集器
 	return f.registry.CreateCollector(appName, collectorName, collectorConfig)
 }

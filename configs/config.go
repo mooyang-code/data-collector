@@ -1,4 +1,4 @@
-// Package configs 配置管理（最好是中文注释！）
+// Package configs 配置管理
 package configs
 
 import (

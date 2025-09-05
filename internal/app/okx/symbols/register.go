@@ -1,4 +1,4 @@
-// Package symbols OKX交易对采集器自注册示例（最好是中文注释！）
+// Package symbols OKX交易对采集器自注册示例
 package symbols
 
 import (
@@ -13,11 +13,29 @@ import (
 // init 函数在包被导入时自动执行，注册采集器创建器
 func init() {
 	// 注册OKX现货交易对采集器
-	app.RegisterCollectorCreator("okx", "symbols", "spot", createOKXSpotSymbolCollector)
-	
+	err := app.NewCollectorCreatorBuilder().
+		WithExchange("okx", "欧易").
+		WithDataType("symbols", "交易对").
+		WithMarketType("spot", "现货").
+		WithDescription("采集欧易现货市场的交易对信息").
+		WithCreator(createOKXSpotSymbolCollector).
+		Register()
+	if err != nil {
+		log.Errorf("注册欧易现货交易对采集器失败: %v", err)
+	}
+
 	// 注册OKX合约交易对采集器
-	app.RegisterCollectorCreator("okx", "symbols", "futures", createOKXFuturesSymbolCollector)
-	
+	err = app.NewCollectorCreatorBuilder().
+		WithExchange("okx", "欧易").
+		WithDataType("symbols", "交易对").
+		WithMarketType("futures", "合约").
+		WithDescription("采集欧易合约市场的交易对信息").
+		WithCreator(createOKXFuturesSymbolCollector).
+		Register()
+	if err != nil {
+		log.Errorf("注册欧易合约交易对采集器失败: %v", err)
+	}
+
 	log.Info("OKX交易对采集器注册完成")
 }
 
@@ -25,7 +43,7 @@ func init() {
 func createOKXSpotSymbolCollector(appName, collectorName string, config *configs.Collector) (app.Collector, error) {
 	// 这里是示例实现，实际需要根据OKX的API实现
 	log.Infof("创建OKX现货交易对采集器: %s.%s", appName, collectorName)
-	
+
 	// 创建OKX采集器实例（这里用模拟实现）
 	collector := &OKXSymbolCollector{
 		exchange:   "okx",
@@ -33,15 +51,15 @@ func createOKXSpotSymbolCollector(appName, collectorName string, config *configs
 		baseURL:    "https://www.okx.com/api/v5",
 		config:     config,
 	}
-	
+
 	// 包装为通用接口
 	wrapper := &OKXSymbolCollectorWrapper{
 		collector:     collector,
-		id:           fmt.Sprintf("%s.%s", appName, collectorName),
+		id:            fmt.Sprintf("%s.%s", appName, collectorName),
 		collectorType: "okx.symbols.spot",
-		dataType:     config.DataType,
+		dataType:      config.DataType,
 	}
-	
+
 	return wrapper, nil
 }
 
@@ -49,7 +67,7 @@ func createOKXSpotSymbolCollector(appName, collectorName string, config *configs
 func createOKXFuturesSymbolCollector(appName, collectorName string, config *configs.Collector) (app.Collector, error) {
 	// 这里是示例实现，实际需要根据OKX的API实现
 	log.Infof("创建OKX合约交易对采集器: %s.%s", appName, collectorName)
-	
+
 	// 创建OKX采集器实例（这里用模拟实现）
 	collector := &OKXSymbolCollector{
 		exchange:   "okx",
@@ -57,15 +75,15 @@ func createOKXFuturesSymbolCollector(appName, collectorName string, config *conf
 		baseURL:    "https://www.okx.com/api/v5",
 		config:     config,
 	}
-	
+
 	// 包装为通用接口
 	wrapper := &OKXSymbolCollectorWrapper{
 		collector:     collector,
-		id:           fmt.Sprintf("%s.%s", appName, collectorName),
+		id:            fmt.Sprintf("%s.%s", appName, collectorName),
 		collectorType: "okx.symbols.futures",
-		dataType:     config.DataType,
+		dataType:      config.DataType,
 	}
-	
+
 	return wrapper, nil
 }
 
@@ -109,10 +127,10 @@ func (c *OKXSymbolCollector) IsRunning() bool {
 // OKXSymbolCollectorWrapper OKX交易对采集器包装器
 type OKXSymbolCollectorWrapper struct {
 	collector     *OKXSymbolCollector
-	id           string
+	id            string
 	collectorType string
-	dataType     string
-	running      bool
+	dataType      string
+	running       bool
 }
 
 // Initialize 初始化采集器

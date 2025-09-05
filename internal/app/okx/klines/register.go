@@ -15,10 +15,29 @@ import (
 // init 函数在包被导入时自动执行，注册采集器创建器
 func init() {
 	// 注册现货K线采集器
-	app.RegisterCollectorCreator("okx", "klines", "spot", createOKXSpotKlineCollector)
+	err := app.NewCollectorCreatorBuilder().
+		WithExchange("okx", "欧易").
+		WithDataType("klines", "K线").
+		WithMarketType("spot", "现货").
+		WithDescription("采集欧易现货市场的K线数据").
+		WithCreator(createOKXSpotKlineCollector).
+		Register()
+	if err != nil {
+		log.Errorf("注册欧易现货K线采集器失败: %v", err)
+	}
 
 	// 注册合约K线采集器
-	app.RegisterCollectorCreator("okx", "klines", "futures", createOKXFuturesKlineCollector)
+	err = app.NewCollectorCreatorBuilder().
+		WithExchange("okx", "欧易").
+		WithDataType("klines", "K线").
+		WithMarketType("futures", "合约").
+		WithDescription("采集欧易合约市场的K线数据").
+		WithCreator(createOKXFuturesKlineCollector).
+		Register()
+	if err != nil {
+		log.Errorf("注册欧易合约K线采集器失败: %v", err)
+	}
+	
 	log.Info("OKX K线采集器注册完成")
 }
 

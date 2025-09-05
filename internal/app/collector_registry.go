@@ -1,8 +1,10 @@
-// Package app 采集器注册中心（最好是中文注释！）
+// Package app 采集器注册中心
 package app
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/mooyang-code/data-collector/configs"
@@ -20,6 +22,18 @@ type CollectorRegistryEntry struct {
 	Creator    CollectorCreatorFunc // 创建函数
 }
 
+// CollectorDescriptor 采集器描述信息
+type CollectorDescriptor struct {
+	Exchange     string               // 交易所名称
+	ExchangeCN   string               // 交易所中文名
+	DataType     string               // 数据类型
+	DataTypeCN   string               // 数据类型中文名
+	MarketType   string               // 市场类型
+	MarketTypeCN string               // 市场类型中文名
+	Description  string               // 描述信息
+	Creator      CollectorCreatorFunc // 创建函数
+}
+
 // CollectorRegistry 采集器注册中心
 type CollectorRegistry struct {
 	entries map[string]*CollectorRegistryEntry
@@ -30,6 +44,9 @@ type CollectorRegistry struct {
 var globalRegistry = &CollectorRegistry{
 	entries: make(map[string]*CollectorRegistryEntry),
 }
+
+// 存储描述信息的全局映射
+var descriptorStore = make(map[string]*CollectorDescriptor)
 
 // RegisterCollectorCreator 注册采集器创建器
 func RegisterCollectorCreator(exchange, dataType, marketType string, creator CollectorCreatorFunc) {
@@ -171,6 +188,164 @@ func GetSupportedTypes() []string {
 
 func IsSupported(exchange, dataType, marketType string) bool {
 	return globalRegistry.IsSupported(exchange, dataType, marketType)
+}
+
+// RegisterCollectorWithDescriptor 注册采集器（带描述信息）
+func RegisterCollectorWithDescriptor(desc *CollectorDescriptor) error {
+	if desc == nil {
+		return fmt.Errorf("采集器描述不能为空")
+	}
+
+	if desc.Exchange == "" || desc.DataType == "" || desc.MarketType == "" {
+		return fmt.Errorf("交易所、数据类型、市场类型不能为空")
+	}
+
+	if desc.Creator == nil {
+		return fmt.Errorf("创建函数不能为空")
+	}
+
+	// 注册到全局注册中心
+	RegisterCollectorCreator(desc.Exchange, desc.DataType, desc.MarketType, desc.Creator)
+
+	// 存储描述信息
+	storeDescriptor(desc)
+
+	return nil
+}
+
+// storeDescriptor 存储描述信息
+func storeDescriptor(desc *CollectorDescriptor) {
+	key := fmt.Sprintf("%s.%s.%s", desc.Exchange, desc.DataType, desc.MarketType)
+	descriptorStore[key] = desc
+}
+
+// GetCollectorDescriptor 获取采集器描述信息
+func GetCollectorDescriptor(exchange, dataType, marketType string) *CollectorDescriptor {
+	key := fmt.Sprintf("%s.%s.%s", exchange, dataType, marketType)
+	return descriptorStore[key]
+}
+
+// ListCollectorsByExchange 列出指定交易所的所有采集器
+func ListCollectorsByExchange(exchange string) []*CollectorDescriptor {
+	var result []*CollectorDescriptor
+	for _, desc := range descriptorStore {
+		if desc.Exchange == exchange {
+			result = append(result, desc)
+		}
+	}
+	// 按数据类型和市场类型排序
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].DataType != result[j].DataType {
+			return result[i].DataType < result[j].DataType
+		}
+		return result[i].MarketType < result[j].MarketType
+	})
+	return result
+}
+
+// PrintRegisteredCollectors 打印所有已注册的采集器
+func PrintRegisteredCollectors() string {
+	var lines []string
+
+	// 按交易所分组
+	exchangeMap := make(map[string][]*CollectorDescriptor)
+	for _, desc := range descriptorStore {
+		exchangeMap[desc.Exchange] = append(exchangeMap[desc.Exchange], desc)
+	}
+
+	// 排序交易所名称
+	var exchanges []string
+	for exchange := range exchangeMap {
+		exchanges = append(exchanges, exchange)
+	}
+	sort.Strings(exchanges)
+
+	// 构建输出
+	for _, exchange := range exchanges {
+		collectors := exchangeMap[exchange]
+		exchangeCN := ""
+		if len(collectors) > 0 && collectors[0].ExchangeCN != "" {
+			exchangeCN = fmt.Sprintf("(%s)", collectors[0].ExchangeCN)
+		}
+		lines = append(lines, fmt.Sprintf("📊 %s %s", exchange, exchangeCN))
+
+		// 按数据类型和市场类型排序
+		sort.Slice(collectors, func(i, j int) bool {
+			if collectors[i].DataType != collectors[j].DataType {
+				return collectors[i].DataType < collectors[j].DataType
+			}
+			return collectors[i].MarketType < collectors[j].MarketType
+		})
+
+		for _, desc := range collectors {
+			dataTypeCN := ""
+			if desc.DataTypeCN != "" {
+				dataTypeCN = fmt.Sprintf("(%s)", desc.DataTypeCN)
+			}
+			marketTypeCN := ""
+			if desc.MarketTypeCN != "" {
+				marketTypeCN = fmt.Sprintf("(%s)", desc.MarketTypeCN)
+			}
+			lines = append(lines, fmt.Sprintf("  ├─ %s %s - %s %s",
+				desc.DataType, dataTypeCN, desc.MarketType, marketTypeCN))
+			if desc.Description != "" {
+				lines = append(lines, fmt.Sprintf("  │  %s", desc.Description))
+			}
+		}
+		lines = append(lines, "")
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// CollectorCreatorBuilder 采集器创建器构建器
+type CollectorCreatorBuilder struct {
+	descriptor *CollectorDescriptor
+}
+
+// NewCollectorCreatorBuilder 创建新的构建器
+func NewCollectorCreatorBuilder() *CollectorCreatorBuilder {
+	return &CollectorCreatorBuilder{
+		descriptor: &CollectorDescriptor{},
+	}
+}
+
+// WithExchange 设置交易所
+func (b *CollectorCreatorBuilder) WithExchange(exchange, exchangeCN string) *CollectorCreatorBuilder {
+	b.descriptor.Exchange = exchange
+	b.descriptor.ExchangeCN = exchangeCN
+	return b
+}
+
+// WithDataType 设置数据类型
+func (b *CollectorCreatorBuilder) WithDataType(dataType, dataTypeCN string) *CollectorCreatorBuilder {
+	b.descriptor.DataType = dataType
+	b.descriptor.DataTypeCN = dataTypeCN
+	return b
+}
+
+// WithMarketType 设置市场类型
+func (b *CollectorCreatorBuilder) WithMarketType(marketType, marketTypeCN string) *CollectorCreatorBuilder {
+	b.descriptor.MarketType = marketType
+	b.descriptor.MarketTypeCN = marketTypeCN
+	return b
+}
+
+// WithDescription 设置描述
+func (b *CollectorCreatorBuilder) WithDescription(description string) *CollectorCreatorBuilder {
+	b.descriptor.Description = description
+	return b
+}
+
+// WithCreator 设置创建函数
+func (b *CollectorCreatorBuilder) WithCreator(creator CollectorCreatorFunc) *CollectorCreatorBuilder {
+	b.descriptor.Creator = creator
+	return b
+}
+
+// Register 注册采集器
+func (b *CollectorCreatorBuilder) Register() error {
+	return RegisterCollectorWithDescriptor(b.descriptor)
 }
 
 // MockCollectorConfig 模拟采集器配置（用于演示）
