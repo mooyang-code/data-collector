@@ -67,7 +67,7 @@ export CGO_ENABLED=1
 # 添加构建信息
 LDFLAGS="-X 'main.Version=$VERSION' -X 'main.BuildTime=$BUILD_TIME' -X 'main.GitCommit=$GIT_COMMIT'"
 
-if go build -ldflags "$LDFLAGS" -o "$BUILD_DIR/bin/$APP_NAME" .; then
+if go build -ldflags "$LDFLAGS" -o "$BUILD_DIR/bin/$APP_NAME" ./cmd/collector; then
     print_success "二进制文件编译成功: $BUILD_DIR/bin/$APP_NAME"
 else
     print_error "二进制文件编译失败"
@@ -80,15 +80,19 @@ print_info "主程序构建完成"
 # 拷贝配置文件
 print_info "拷贝配置文件..."
 if [ -d "configs" ]; then
-    cp configs/*.yaml "$BUILD_DIR/configs/" 2>/dev/null || true
+    # 清理旧的配置文件
+    rm -rf "$BUILD_DIR/configs"/*
+    
+    # 拷贝所有配置文件和子目录
+    cp -r configs/* "$BUILD_DIR/configs/" 2>/dev/null || true
     if [ $? -eq 0 ]; then
         print_success "配置文件拷贝到configs目录成功"
-        ls -la "$BUILD_DIR/configs/"
+        find "$BUILD_DIR/configs/" -type f | head -10
     else
-        print_warning "没有找到YAML配置文件"
+        print_warning "没有找到配置文件"
     fi
 
-    # 特别拷贝 trpc_go.yaml 到 bin 目录
+    # 特别拷贝 trpc_go.yaml 到 bin 目录（如果存在）
     if [ -f "configs/trpc_go.yaml" ]; then
         cp configs/trpc_go.yaml "$BUILD_DIR/bin/"
         print_success "trpc_go.yaml 拷贝到bin目录成功"

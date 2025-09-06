@@ -1,5 +1,9 @@
 release/
 .claude/
-data-collector
-main
+bin/
+*.log
+*.exe
+.DS_Store
+.idea/
+.vscode/
 

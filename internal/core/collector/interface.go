@@ -1,4 +1,3 @@
-// Package collector 采集器核心接口定义
 package collector
 
 import (
@@ -6,74 +5,74 @@ import (
 	"time"
 )
 
-// Collector 采集器基础接口
 type Collector interface {
 	// 基础信息
 	ID() string
 	Type() string
-	Exchange() string
+	DataType() string
 	
-	// 生命周期管理
+	// 生命周期
 	Initialize(ctx context.Context) error
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
-	
-	// 状态管理
-	IsRunning() bool
-	GetStatus() Status
-	GetMetrics() Metrics
-}
-
-// TimedCollector 定时采集器接口
-type TimedCollector interface {
-	Collector
 	
 	// 定时器管理
 	AddTimer(name string, interval time.Duration, handler TimerHandler) error
 	RemoveTimer(name string) error
 	GetTimers() map[string]*Timer
-}
-
-// StreamCollector 流式采集器接口
-type StreamCollector interface {
-	Collector
 	
-	// WebSocket连接管理
-	Connect(ctx context.Context) error
-	Disconnect(ctx context.Context) error
-	Subscribe(topics []string) error
-	Unsubscribe(topics []string) error
+	// 状态监控
+	IsRunning() bool
+	GetStatus() CollectorStatus
+	GetMetrics() CollectorMetrics
 }
 
-// Timer 定时器
-type Timer struct {
-	Name     string
-	Interval time.Duration
-	Handler  TimerHandler
-	Running  bool
-	LastRun  time.Time
-	NextRun  time.Time
-	RunCount int64
-	Errors   int64
-}
-
-// TimerHandler 定时器处理函数
 type TimerHandler func(ctx context.Context) error
 
-// Status 采集器状态
-type Status struct {
-	State      string    // idle, initializing, running, stopping, stopped, error
-	StartTime  time.Time
-	LastUpdate time.Time
-	LastError  error
-	Message    string
+type Timer struct {
+	Name       string
+	Interval   time.Duration
+	Handler    TimerHandler
+	LastRun    time.Time
+	NextRun    time.Time
+	RunCount   int64
+	ErrorCount int64
+	ticker     *time.Ticker
+	cancel     context.CancelFunc
 }
 
-// Metrics 采集器指标
-type Metrics struct {
-	DataPoints   int64         // 数据点数量
-	LastDataTime time.Time     // 最后数据时间
-	ErrorCount   int64         // 错误次数
-	Latency      time.Duration // 延迟
-	Custom       map[string]interface{}
+type CollectorStatus struct {
+	ID         string
+	Type       string
+	DataType   string
+	IsRunning  bool
+	StartTime  time.Time
+	LastUpdate time.Time
+	Timers     map[string]TimerStatus
+}
+
+type TimerStatus struct {
+	Name       string
+	Interval   time.Duration
+	LastRun    time.Time
+	NextRun    time.Time
+	RunCount   int64
+	ErrorCount int64
+}
+
+type CollectorMetrics struct {
+	StartTime       time.Time
+	DataCollected   int64
+	EventsPublished int64
+	ErrorsTotal     int64
+	LastError       error
+	LastErrorTime   time.Time
+	TimerMetrics    map[string]TimerMetrics
+}
+
+type TimerMetrics struct {
+	RunCount   int64
+	ErrorCount int64
+	LastRun    time.Time
+	AvgLatency time.Duration
 }

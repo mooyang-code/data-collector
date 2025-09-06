@@ -124,7 +124,7 @@ coverage:
 build-collector:
 	@echo "📦 正在构建 $(COLLECTOR_NAME) 版本 $(VERSION)..."
 	@mkdir -p $(BIN_DIR)
-	go build $(GO_BUILD_FLAGS) -o $(BIN_DIR)/$(COLLECTOR_NAME) ./main.go
+	go build $(GO_BUILD_FLAGS) -o $(BIN_DIR)/$(COLLECTOR_NAME) ./cmd/collector/main.go
 
 # 构建所有程序（现在只有主程序）
 build-all: build-collector
@@ -163,9 +163,9 @@ dev-data: clean-data init-data
 dev:
 	@echo "🚀 开发模式启动..."
 	@if [ -f "$(CONFIGS_DIR)/config.yaml" ]; then \
-		go run ./main.go -config=$(CONFIGS_DIR)/config.yaml; \
+		go run ./cmd/collector/main.go --config=$(CONFIGS_DIR)/config.yaml; \
 	else \
-		go run ./main.go; \
+		go run ./cmd/collector/main.go; \
 	fi
 
 # 在构建目录运行服务
@@ -200,10 +200,10 @@ install: deps proto check build-all
 		echo "✅ 配置文件拷贝完成"; \
 	fi
 
-	# 特别拷贝 trpc_go.yaml 到 bin 目录
-	@if [ -f "$(CONFIGS_DIR)/trpc_go.yaml" ]; then \
-		cp $(CONFIGS_DIR)/trpc_go.yaml $(BIN_DIR)/; \
-		echo "✅ trpc_go.yaml 拷贝到bin目录完成"; \
+	# 拷贝配置模板
+	@if [ -f "$(CONFIGS_DIR)/config.yaml" ]; then \
+		cp $(CONFIGS_DIR)/config.yaml $(BUILD_DIR)/configs/config.yaml.example; \
+		echo "✅ 配置模板拷贝完成"; \
 	fi
 
 	@echo "🎉 安装完成！"
@@ -222,9 +222,9 @@ release: clean deps check
 		output_dir="release-dist/$(APP_NAME)-$(VERSION)-$$os-$$arch"; \
 		mkdir -p $$output_dir/bin; \
 		if [ "$$os" = "windows" ]; then \
-			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME).exe ./main.go; \
+			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME).exe ./cmd/collector/main.go; \
 		else \
-			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME) ./main.go; \
+			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME) ./cmd/collector/main.go; \
 		fi; \
 		mkdir -p $$output_dir/configs $$output_dir/data $$output_dir/log; \
 		if [ -d "$(CONFIGS_DIR)" ]; then cp -r $(CONFIGS_DIR)/* $$output_dir/configs/ 2>/dev/null || true; fi; \
@@ -288,13 +288,9 @@ bench:
 	go test -bench=. -benchmem ./...
 
 # 运行示例程序
-demo-collector: build-collector
+demo-collector:
 	@echo "🎯 运行数据采集器演示..."
-	@if [ -f "$(BIN_DIR)/$(COLLECTOR_NAME)" ]; then \
-		cd $(BUILD_DIR) && ./bin/$(COLLECTOR_NAME) --demo; \
-	else \
-		echo "❌ 错误: 请先构建采集器 'make build-collector'"; \
-	fi
+	go run cmd/demo/main.go
 
 # TRPC 演示已移除，只保留主程序演示
 
@@ -316,21 +312,21 @@ example-symbols:
 	fi
 
 # 模块化测试
-test-collector:
-	@echo "🧪 测试数据采集器模块..."
-	go test -v ./internal/collector/...
+test-core:
+	@echo "🧪 测试核心框架模块..."
+	go test -v ./internal/core/...
+
+test-model:
+	@echo "🧪 测试数据模型模块..."
+	go test -v ./internal/model/...
+
+test-source:
+	@echo "🧪 测试数据源模块..."
+	go test -v ./internal/source/...
 
 test-storage:
 	@echo "🧪 测试存储模块..."
 	go test -v ./internal/storage/...
-
-test-services:
-	@echo "🧪 测试服务模块..."
-	go test -v ./internal/services/...
-
-test-infra:
-	@echo "🧪 测试基础设施模块..."
-	go test -v ./internal/infra/...
 
 # 性能测试
 perf-test:
@@ -351,5 +347,5 @@ integration-test:
 	fi
 
 # 全面测试
-test-all: test test-collector test-storage test-services test-infra perf-test integration-test
+test-all: test test-core test-model test-source test-storage perf-test integration-test
 	@echo "✅ 所有测试完成"
