@@ -131,7 +131,6 @@ func loadApps(ctx context.Context, mainConfig *config.Config, sourceConfigs map[
 		if err := manager.StartApp(sourceConfig.App.ID); err != nil {
 			return fmt.Errorf("启动App %s 失败: %w", source.Name, err)
 		}
-
 		log.Printf("成功加载并启动数据源: %s", source.Name)
 	}
 

@@ -41,7 +41,7 @@ collectors:
 
   # 实时行情采集器
   ticker:
-    enabled: true
+    enabled: false
     mode: "all"  # all, specific
     symbols: []  # 空表示所有交易对
     update_interval: "5s"
