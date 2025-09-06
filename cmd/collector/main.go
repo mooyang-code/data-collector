@@ -82,7 +82,7 @@ func main() {
 
 	// 优雅关闭
 	// 停止所有App
-	if err := appManager.Shutdown(); err != nil {
+	if err := appManager.Shutdown(ctx); err != nil {
 		log.Printf("停止Apps时发生错误: %v", err)
 	}
 
@@ -128,10 +128,9 @@ func loadApps(ctx context.Context, mainConfig *config.Config, sourceConfigs map[
 			return fmt.Errorf("创建App %s 失败: %w", source.Name, err)
 		}
 
-		if err := manager.StartApp(sourceConfig.App.ID); err != nil {
+		if err := manager.StartApp(ctx, sourceConfig.App.ID); err != nil {
 			return fmt.Errorf("启动App %s 失败: %w", source.Name, err)
 		}
-
 		log.Printf("成功加载并启动数据源: %s", source.Name)
 	}
 
@@ -143,7 +142,7 @@ func loadApps(ctx context.Context, mainConfig *config.Config, sourceConfigs map[
 // registerEventHandlers 注册事件处理器
 func registerEventHandlers(eventBus *event.MemoryEventBus) {
 	// 数据事件处理器
-	eventBus.Subscribe("data.*", func(e event.Event) error {
+	eventBus.Subscribe("data.*", func(ctx context.Context, e event.Event) error {
 		if dataEvent, ok := e.(*event.DataEvent); ok {
 			log.Printf("📊 数据事件: %s - 交易所=%s, 交易对=%s, 数量=%d",
 				e.Type(),
@@ -156,13 +155,13 @@ func registerEventHandlers(eventBus *event.MemoryEventBus) {
 	})
 
 	// 系统事件处理器
-	eventBus.Subscribe("system.*", func(e event.Event) error {
+	eventBus.Subscribe("system.*", func(ctx context.Context, e event.Event) error {
 		log.Printf("📢 系统事件: %s", e.Type())
 		return nil
 	})
 
 	// 错误事件处理器
-	eventBus.Subscribe("error.*", func(e event.Event) error {
+	eventBus.Subscribe("error.*", func(ctx context.Context, e event.Event) error {
 		if errEvent, ok := e.(*event.ErrorEvent); ok {
 			log.Printf("❌ 错误事件: %s - %v", errEvent.Source(), errEvent.Error)
 		}

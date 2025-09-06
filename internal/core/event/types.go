@@ -1,7 +1,6 @@
 package event
 
 import (
-	"context"
 	"time"
 )
 
@@ -12,7 +11,6 @@ type Event interface {
 	Source() string         // 事件源，如 "binance.kline.collector"
 	Timestamp() time.Time
 	Data() interface{}
-	Context() context.Context
 }
 
 // BaseEvent 基础事件实现
@@ -22,7 +20,6 @@ type BaseEvent struct {
 	source    string
 	timestamp time.Time
 	data      interface{}
-	ctx       context.Context
 }
 
 func NewEvent(eventType, source string, data interface{}) Event {
@@ -32,7 +29,6 @@ func NewEvent(eventType, source string, data interface{}) Event {
 		source:    source,
 		timestamp: time.Now(),
 		data:      data,
-		ctx:       context.Background(),
 	}
 }
 
@@ -56,31 +52,23 @@ func (e *BaseEvent) Data() interface{} {
 	return e.data
 }
 
-func (e *BaseEvent) Context() context.Context {
-	return e.ctx
-}
-
 // 事件类型常量
 const (
-	// 数据事件
-	EventDataCollected = "data.*.collected"
-	EventDataProcessed = "data.*.processed"
-	EventDataStored    = "data.*.stored"
-	
-	// 具体数据类型事件
-	EventKlineCollected     = "data.kline.collected"
-	EventTickerCollected    = "data.ticker.collected"
-	EventOrderBookCollected = "data.orderbook.collected"
-	EventTradeCollected     = "data.trade.collected"
-	
-	// 系统事件
-	EventAppStarted      = "app.*.started"
-	EventAppStopped      = "app.*.stopped"
-	EventCollectorError  = "collector.*.error"
-	
-	// 分析事件
-	EventAnomalyDetected = "analysis.anomaly.*"
-	EventSignalGenerated = "analysis.signal.*"
+	EventDataCollected = "data.*.collected"       // EventDataCollected 数据采集完成事件
+	EventDataProcessed = "data.*.processed"       // EventDataProcessed 数据处理完成事件
+	EventDataStored    = "data.*.stored"          // EventDataStored 数据存储完成事件
+
+	EventKlineCollected     = "data.kline.collected"     // EventKlineCollected K线数据采集事件
+	EventTickerCollected    = "data.ticker.collected"    // EventTickerCollected 行情数据采集事件
+	EventOrderBookCollected = "data.orderbook.collected" // EventOrderBookCollected 订单簿数据采集事件
+	EventTradeCollected     = "data.trade.collected"     // EventTradeCollected 交易数据采集事件
+
+	EventAppStarted      = "app.*.started"      // EventAppStarted 应用启动事件
+	EventAppStopped      = "app.*.stopped"      // EventAppStopped 应用停止事件
+	EventCollectorError  = "collector.*.error" // EventCollectorError 采集器错误事件
+
+	EventAnomalyDetected = "analysis.anomaly.*" // EventAnomalyDetected 异常检测事件
+	EventSignalGenerated = "analysis.signal.*" // EventSignalGenerated 信号生成事件
 )
 
 // DataEvent 数据事件

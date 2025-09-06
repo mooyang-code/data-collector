@@ -71,7 +71,7 @@ func main() {
 	}
 
 	log.Println("▶️ 启动数据采集...")
-	if err := appManager.StartApp("binance"); err != nil {
+	if err := appManager.StartApp(ctx, "binance"); err != nil {
 		log.Fatalf("启动App失败: %v", err)
 	}
 
@@ -90,11 +90,11 @@ func main() {
 	// 优雅关闭
 	log.Println("\n🛑 正在关闭数据采集器...")
 
-	if err := appManager.StopApp("binance"); err != nil {
+	if err := appManager.StopApp(ctx, "binance"); err != nil {
 		log.Printf("停止App失败: %v", err)
 	}
 
-	if err := appManager.Shutdown(); err != nil {
+	if err := appManager.Shutdown(ctx); err != nil {
 		log.Printf("关闭管理器失败: %v", err)
 	}
 
@@ -105,7 +105,7 @@ func main() {
 // subscribeToEvents 订阅事件【即采集器发出的结果】
 func subscribeToEvents(eventBus *event.MemoryEventBus) {
 	// 订阅K线数据事件
-	eventBus.Subscribe("data.kline.*", func(e event.Event) error {
+	eventBus.Subscribe("data.kline.*", func(ctx context.Context, e event.Event) error {
 		if dataEvent, ok := e.(*event.DataEvent); ok {
 			log.Printf("📊 收到K线数据事件: 交易所=%s, 交易对=%s, 数据类型=%s, 数量=%d",
 				dataEvent.Exchange,
@@ -135,13 +135,13 @@ func subscribeToEvents(eventBus *event.MemoryEventBus) {
 	})
 
 	// 订阅系统事件
-	eventBus.Subscribe("system.*", func(e event.Event) error {
+	eventBus.Subscribe("system.*", func(ctx context.Context, e event.Event) error {
 		log.Printf("📢 系统事件: %s - %v", e.Type(), e.Data())
 		return nil
 	})
 
 	// 订阅错误事件
-	eventBus.Subscribe("error.*", func(e event.Event) error {
+	eventBus.Subscribe("error.*", func(ctx context.Context, e event.Event) error {
 		log.Printf("❌ 错误事件: %s - %v", e.Type(), e.Data())
 		return nil
 	})

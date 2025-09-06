@@ -50,7 +50,6 @@ func (h *LogHandler) Handle(event Event) error {
 // StorageHandler 存储处理器（示例）
 type StorageHandler struct {
 	BaseHandler
-	// storage Storage // 实际应该注入存储接口
 }
 
 func NewStorageHandler() *StorageHandler {
@@ -71,7 +70,6 @@ func (h *StorageHandler) Handle(event Event) error {
 	default:
 		log.Printf("[%s] 未知事件类型: %s", h.Name(), event.Type())
 	}
-	
 	return nil
 }
 
@@ -91,13 +89,12 @@ func NewMonitorHandler() *MonitorHandler {
 func (h *MonitorHandler) Handle(event Event) error {
 	// 更新指标
 	h.metrics[event.Type()]++
-	
+
 	// 检查是否是错误事件
 	if _, ok := event.(*ErrorEvent); ok {
 		log.Printf("[%s] 错误事件: %v", h.Name(), event.Data())
 		// 可以发送告警
 	}
-	
 	return nil
 }
 

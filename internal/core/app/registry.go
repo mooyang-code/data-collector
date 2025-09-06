@@ -50,11 +50,11 @@ func GetRegistry() *AppRegistry {
 func (r *AppRegistry) Register(name string, descriptor *AppDescriptor) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	if _, exists := r.apps[name]; exists {
-		return fmt.Errorf("App %s 已经注册", name)
+		return fmt.Errorf("app %s 已经注册", name)
 	}
-	
+
 	descriptor.Name = name
 	r.apps[name] = descriptor
 	return nil
@@ -63,24 +63,22 @@ func (r *AppRegistry) Register(name string, descriptor *AppDescriptor) error {
 func (r *AppRegistry) Get(name string) (*AppDescriptor, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	descriptor, exists := r.apps[name]
 	if !exists {
-		return nil, fmt.Errorf("App %s 未注册", name)
+		return nil, fmt.Errorf("app %s 未注册", name)
 	}
-	
 	return descriptor, nil
 }
 
 func (r *AppRegistry) List() []*AppDescriptor {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	descriptors := make([]*AppDescriptor, 0, len(r.apps))
 	for _, desc := range r.apps {
 		descriptors = append(descriptors, desc)
 	}
-	
 	return descriptors
 }
 
@@ -89,7 +87,7 @@ func (r *AppRegistry) CreateApp(name string, config *AppConfig) (App, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if config == nil {
 		config = &AppConfig{
 			ID:       name,
@@ -98,6 +96,5 @@ func (r *AppRegistry) CreateApp(name string, config *AppConfig) (App, error) {
 			Settings: make(map[string]interface{}),
 		}
 	}
-	
 	return descriptor.Creator(config)
 }

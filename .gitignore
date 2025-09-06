@@ -1,4 +1,6 @@
-release/
+
+data-collector
+release/*
 .claude/
 bin/
 *.log

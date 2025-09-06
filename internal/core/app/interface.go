@@ -8,10 +8,10 @@ import (
 type SourceType string
 
 const (
-	SourceTypeMarket     SourceType = "market"
-	SourceTypeSocial     SourceType = "social"
-	SourceTypeBlockchain SourceType = "blockchain"
-	SourceTypeNews       SourceType = "news"
+	SourceTypeMarket     SourceType = "market"     // SourceTypeMarket 市场数据源类型
+	SourceTypeSocial     SourceType = "social"     // SourceTypeSocial 社交数据源类型
+	SourceTypeBlockchain SourceType = "blockchain" // SourceTypeBlockchain 区块链数据源类型
+	SourceTypeNews       SourceType = "news"       // SourceTypeNews 新闻数据源类型
 )
 
 type App interface {
@@ -92,10 +92,10 @@ type AppMetrics struct {
 type AppStatus string
 
 const (
-	AppStatusInitialized AppStatus = "initialized"
-	AppStatusRunning     AppStatus = "running"
-	AppStatusStopped     AppStatus = "stopped"
-	AppStatusError       AppStatus = "error"
+	AppStatusInitialized AppStatus = "initialized" // AppStatusInitialized 应用已初始化状态
+	AppStatusRunning     AppStatus = "running"     // AppStatusRunning 应用运行中状态
+	AppStatusStopped     AppStatus = "stopped"     // AppStatusStopped 应用已停止状态
+	AppStatusError       AppStatus = "error"       // AppStatusError 应用错误状态
 )
 
 type HealthStatus struct {

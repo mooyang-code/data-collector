@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"time"
-	
+
 	"github.com/mooyang-code/data-collector/internal/core/collector"
 	"github.com/mooyang-code/data-collector/internal/core/event"
 	"github.com/mooyang-code/data-collector/internal/model/market"
@@ -15,9 +15,9 @@ import (
 // TickerCollector 行情数据采集器
 type TickerCollector struct {
 	*collector.BaseCollector
-	client    *api.Client
-	symbols   []string
-	eventBus  event.EventBus
+	client         *api.Client
+	symbols        []string
+	eventBus       event.EventBus
 	updateInterval time.Duration
 }
 
@@ -30,7 +30,7 @@ func init() {
 		Description("币安24小时行情数据采集器").
 		Creator(NewTickerCollector).
 		Register()
-	
+
 	if err != nil {
 		panic(fmt.Sprintf("注册行情采集器失败: %v", err))
 	}
@@ -42,14 +42,14 @@ func NewTickerCollector(config map[string]interface{}) (collector.Collector, err
 	if !ok {
 		return nil, fmt.Errorf("API客户端未提供")
 	}
-	
+
 	c := &TickerCollector{
 		BaseCollector:  collector.NewBaseCollector("binance_ticker", "market", "ticker"),
 		client:         client,
 		symbols:        []string{"BTCUSDT", "ETHUSDT", "BNBUSDT"},
 		updateInterval: 5 * time.Second,
 	}
-	
+
 	if symbols, ok := config["symbols"].([]string); ok {
 		c.symbols = symbols
 	}
@@ -62,7 +62,6 @@ func NewTickerCollector(config map[string]interface{}) (collector.Collector, err
 		adapter := event.NewEventBusAdapter(eventBus)
 		c.BaseCollector.SetEventBus(adapter)
 	}
-	
 	return c, nil
 }
 
@@ -71,25 +70,24 @@ func (c *TickerCollector) Initialize(ctx context.Context) error {
 	if err := c.BaseCollector.Initialize(ctx); err != nil {
 		return err
 	}
-	
+
 	// 添加采集定时器
 	c.AddTimer("collect_tickers", c.updateInterval, c.collectTickers)
-	
+
 	log.Printf("行情采集器: 已初始化，更新间隔: %v", c.updateInterval)
-	
 	return nil
 }
 
 // collectTickers 采集行情数据
 func (c *TickerCollector) collectTickers(ctx context.Context) error {
 	log.Printf("行情采集器: 开始采集行情数据")
-	
+
 	// 获取所有行情
 	tickers, err := c.client.GetAllTickers()
 	if err != nil {
 		return fmt.Errorf("获取行情失败: %w", err)
 	}
-	
+
 	// 创建批量数据
 	batch := market.NewTickerBatch("binance")
 	for _, ticker := range tickers {
@@ -101,9 +99,9 @@ func (c *TickerCollector) collectTickers(ctx context.Context) error {
 			}
 		}
 	}
-	
+
 	log.Printf("行情采集器: 成功采集 %d 个交易对行情", batch.Count)
-	
+
 	// 发布事件
 	if c.eventBus != nil {
 		dataEvent := &event.DataEvent{
@@ -113,9 +111,8 @@ func (c *TickerCollector) collectTickers(ctx context.Context) error {
 			Count:     batch.Count,
 			RawData:   batch,
 		}
-		
-		c.eventBus.PublishAsync(dataEvent)
+
+		c.eventBus.PublishAsync(ctx, dataEvent)
 	}
-	
 	return nil
 }

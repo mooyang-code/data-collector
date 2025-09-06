@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-	
+
 	"github.com/mooyang-code/data-collector/internal/model/common"
 )
 
@@ -52,14 +52,13 @@ func (k *Kline) Validate() error {
 	if k.OpenTime.After(k.CloseTime) {
 		return fmt.Errorf("开盘时间不能晚于收盘时间")
 	}
-	
+
 	// 验证价格
 	high, _ := k.High.Float64()
 	low, _ := k.Low.Float64()
 	if high < low {
 		return fmt.Errorf("最高价不能低于最低价")
 	}
-	
 	return nil
 }
 
@@ -98,16 +97,15 @@ func (kb *KlineBatch) AddKline(kline *Kline) {
 	kb.Count = len(kb.Klines)
 }
 
-// 预定义的时间间隔
 const (
-	Interval1m  = "1m"
-	Interval5m  = "5m"
-	Interval15m = "15m"
-	Interval30m = "30m"
-	Interval1h  = "1h"
-	Interval4h  = "4h"
-	Interval1d  = "1d"
-	Interval1w  = "1w"
+	Interval1m  = "1m"  // Interval1m 1分钟时间间隔
+	Interval5m  = "5m"  // Interval5m 5分钟时间间隔
+	Interval15m = "15m" // Interval15m 15分钟时间间隔
+	Interval30m = "30m" // Interval30m 30分钟时间间隔
+	Interval1h  = "1h"  // Interval1h 1小时时间间隔
+	Interval4h  = "4h"  // Interval4h 4小时时间间隔
+	Interval1d  = "1d"  // Interval1d 1天时间间隔
+	Interval1w  = "1w"  // Interval1w 1周时间间隔
 )
 
 // IntervalDuration 获取间隔对应的时间长度

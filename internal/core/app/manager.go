@@ -29,8 +29,6 @@ type AppConfig struct {
 type Manager struct {
 	apps          map[string]App
 	mu            sync.RWMutex
-	ctx           context.Context
-	cancel        context.CancelFunc
 	eventBus      event.EventBus
 	maxConcurrent int
 }
@@ -72,43 +70,37 @@ func (m *Manager) CreateApp(config *AppConfig) error {
 }
 
 // StartApp 启动指定的App
-func (m *Manager) StartApp(id string) error {
+func (m *Manager) StartApp(ctx context.Context, id string) error {
 	m.mu.RLock()
 	app, exists := m.apps[id]
 	m.mu.RUnlock()
 
 	if !exists {
-		return fmt.Errorf("App %s 不存在", id)
-	}
-
-	// 确保有context
-	if m.ctx == nil {
-		m.ctx = context.Background()
+		return fmt.Errorf("app %s 不存在", id)
 	}
 
 	// 初始化
-	if err := app.Initialize(m.ctx); err != nil {
+	if err := app.Initialize(ctx); err != nil {
 		return fmt.Errorf("初始化App %s 失败: %w", id, err)
 	}
 
 	// 启动
-	if err := app.Start(m.ctx); err != nil {
+	if err := app.Start(ctx); err != nil {
 		return fmt.Errorf("启动App %s 失败: %w", id, err)
 	}
 	return nil
 }
 
 // StopApp 停止指定的App
-func (m *Manager) StopApp(id string) error {
+func (m *Manager) StopApp(ctx context.Context, id string) error {
 	m.mu.RLock()
 	app, exists := m.apps[id]
 	m.mu.RUnlock()
 
 	if !exists {
-		return fmt.Errorf("App %s 不存在", id)
+		return fmt.Errorf("app %s 不存在", id)
 	}
-
-	return app.Stop(context.Background())
+	return app.Stop(ctx)
 }
 
 // GetApp 获取App
@@ -118,7 +110,7 @@ func (m *Manager) GetApp(id string) (App, error) {
 
 	app, exists := m.apps[id]
 	if !exists {
-		return nil, fmt.Errorf("App %s 不存在", id)
+		return nil, fmt.Errorf("app %s 不存在", id)
 	}
 	return app, nil
 }
@@ -150,25 +142,20 @@ type AppInfo struct {
 }
 
 // Shutdown 关闭管理器
-func (m *Manager) Shutdown() error {
+func (m *Manager) Shutdown(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	// 停止所有App
 	for id, app := range m.apps {
-		if err := app.Stop(context.Background()); err != nil {
+		if err := app.Stop(ctx); err != nil {
 			log.Printf("停止App %s 失败: %v", id, err)
 		}
-	}
-
-	if m.cancel != nil {
-		m.cancel()
 	}
 	return nil
 }
 
 // Initialize 初始化管理器
 func (m *Manager) Initialize(ctx context.Context) error {
-	m.ctx, m.cancel = context.WithCancel(ctx)
 	return nil
 }

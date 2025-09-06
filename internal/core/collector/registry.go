@@ -49,12 +49,12 @@ func GetRegistry() *CollectorRegistry {
 func (r *CollectorRegistry) RegisterWithDescriptor(descriptor *CollectorDescriptor) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	key := r.generateKey(descriptor.Source, descriptor.DataType)
 	if _, exists := r.collectors[key]; exists {
 		return fmt.Errorf("采集器 %s 已经注册", key)
 	}
-	
+
 	r.collectors[key] = descriptor
 	return nil
 }
@@ -62,39 +62,36 @@ func (r *CollectorRegistry) RegisterWithDescriptor(descriptor *CollectorDescript
 func (r *CollectorRegistry) Get(source, dataType string) (*CollectorDescriptor, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	key := r.generateKey(source, dataType)
 	descriptor, exists := r.collectors[key]
 	if !exists {
 		return nil, fmt.Errorf("采集器 %s 未注册", key)
 	}
-	
 	return descriptor, nil
 }
 
 func (r *CollectorRegistry) List() []*CollectorDescriptor {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	descriptors := make([]*CollectorDescriptor, 0, len(r.collectors))
 	for _, desc := range r.collectors {
 		descriptors = append(descriptors, desc)
 	}
-	
 	return descriptors
 }
 
 func (r *CollectorRegistry) ListBySource(source string) []*CollectorDescriptor {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	var descriptors []*CollectorDescriptor
 	for _, desc := range r.collectors {
 		if desc.Source == source {
 			descriptors = append(descriptors, desc)
 		}
 	}
-	
 	return descriptors
 }
 
@@ -103,11 +100,10 @@ func (r *CollectorRegistry) CreateCollector(source, dataType string, config map[
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if config == nil {
 		config = make(map[string]interface{})
 	}
-	
 	return descriptor.Creator(config)
 }
 
