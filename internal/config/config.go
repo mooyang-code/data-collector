@@ -12,6 +12,7 @@ import (
 // Config 主配置结构
 type Config struct {
 	System     SystemConfig     `yaml:"system"`
+	Runtime    RuntimeConfig    `yaml:"runtime"`
 	Logging    LoggingConfig    `yaml:"logging"`
 	EventBus   EventBusConfig   `yaml:"event_bus"`
 	Storage    StorageConfig    `yaml:"storage"`
@@ -159,6 +160,28 @@ type TransformationConfig struct {
 type AggregationConfig struct {
 	Enabled   bool     `yaml:"enabled"`
 	Intervals []string `yaml:"intervals"`
+}
+
+// RuntimeConfig 运行时模式配置
+type RuntimeConfig struct {
+	Mode       string            `yaml:"mode"`       // standalone | serverless
+	Serverless ServerlessConfig  `yaml:"serverless"`
+}
+
+// ServerlessConfig 云函数相关配置
+type ServerlessConfig struct {
+	Provider        string          `yaml:"provider"`         // tencent | aws | aliyun
+	EnableLocalTimer bool           `yaml:"enable_local_timer"`
+	TaskStore       TaskStoreConfig `yaml:"task_store"`
+	NodeID          string          `yaml:"node_id"`          // 云函数节点ID
+	MooxURL         string          `yaml:"moox_url"`         // Moox服务地址
+	CacheEndpoint   string          `yaml:"cache_endpoint"`   // 缓存服务端点
+}
+
+// TaskStoreConfig 任务存储配置
+type TaskStoreConfig struct {
+	Type string `yaml:"type"` // bleve
+	Path string `yaml:"path"` // 存储路径
 }
 
 // SourceMonitoringConfig 源监控配置

@@ -4,7 +4,7 @@
 .PHONY: build-collector init-data clean-data dev-data release docker docker-push coverage
 .PHONY: demo-collector example-kline example-symbols
 .PHONY: test-collector test-storage test-services test-infra perf-test integration-test test-all
-.PHONY: fmt tidy bench
+.PHONY: fmt tidy bench build-scf run-serverless deploy
 
 # 默认目标
 all: deps check build-all
@@ -47,6 +47,7 @@ help:
 	@echo "  build-collector    - 构建数据采集器"
 	@echo "  build-all          - 构建所有程序（现在只有主程序）"
 	@echo "  build              - build-all 的别名"
+	@echo "  build-scf          - 构建腾讯云函数版本"
 	@echo "  clean              - 清理所有构建文件"
 	@echo ""
 	@echo "🗄️  数据管理:"
@@ -62,8 +63,10 @@ help:
 	@echo "  coverage           - 生成测试覆盖率报告"
 	@echo "  dev                - 开发模式运行采集器"
 	@echo "  run                - 在构建目录运行服务"
+	@echo "  run-serverless     - 本地运行云函数模式"
 	@echo "  stop               - 停止运行的服务"
 	@echo "  install            - 完整构建并安装到release目录"
+	@echo "  deploy             - 部署到远程服务器"
 	@echo ""
 	@echo "📁 目录结构:"
 	@echo "  $(BUILD_DIR)/bin/      - 二进制文件"
@@ -75,6 +78,8 @@ help:
 	@echo "  make build-all VERSION=v1.0.0  - 构建指定版本"
 	@echo "  make install VERSION=v1.0.0    - 安装指定版本到release目录"
 	@echo "  make dev-data                   - 快速设置开发环境"
+	@echo "  make build-scf                  - 构建云函数包"
+	@echo "  make deploy SERVER=ubuntu@43.132.204.177  - 部署到远程服务器"
 
 # 安装依赖
 deps:
@@ -124,7 +129,7 @@ coverage:
 build-collector:
 	@echo "📦 正在构建 $(COLLECTOR_NAME) 版本 $(VERSION)..."
 	@mkdir -p $(BIN_DIR)
-	go build $(GO_BUILD_FLAGS) -o $(BIN_DIR)/$(COLLECTOR_NAME) ./cmd/collector/main.go
+	go build $(GO_BUILD_FLAGS) -o $(BIN_DIR)/$(COLLECTOR_NAME) ./main.go
 
 # 构建所有程序（现在只有主程序）
 build-all: build-collector
@@ -163,9 +168,9 @@ dev-data: clean-data init-data
 dev:
 	@echo "🚀 开发模式启动..."
 	@if [ -f "$(CONFIGS_DIR)/config.yaml" ]; then \
-		go run ./cmd/collector/main.go --config=$(CONFIGS_DIR)/config.yaml; \
+		go run ./main.go --config=$(CONFIGS_DIR)/config.yaml; \
 	else \
-		go run ./cmd/collector/main.go; \
+		go run ./main.go; \
 	fi
 
 # 在构建目录运行服务
@@ -222,9 +227,9 @@ release: clean deps check
 		output_dir="release-dist/$(APP_NAME)-$(VERSION)-$$os-$$arch"; \
 		mkdir -p $$output_dir/bin; \
 		if [ "$$os" = "windows" ]; then \
-			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME).exe ./cmd/collector/main.go; \
+			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME).exe ./main.go; \
 		else \
-			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME) ./cmd/collector/main.go; \
+			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME) ./main.go; \
 		fi; \
 		mkdir -p $$output_dir/configs $$output_dir/data $$output_dir/log; \
 		if [ -d "$(CONFIGS_DIR)" ]; then cp -r $(CONFIGS_DIR)/* $$output_dir/configs/ 2>/dev/null || true; fi; \
@@ -349,3 +354,46 @@ integration-test:
 # 全面测试
 test-all: test test-core test-model test-source test-storage perf-test integration-test
 	@echo "✅ 所有测试完成"
+
+# 云函数相关目标
+build-scf:
+	@echo "🔨 正在构建腾讯云函数版本..."
+	GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o main ./main.go
+	@echo "📁 准备云函数配置文件..."
+	@mkdir -p scf-build/configs
+	@cp -r configs/* scf-build/configs/
+	@cp configs/config.serverless.yaml scf-build/configs/config.yaml
+	@cp main scf-build/
+	@echo "📦 打包云函数..."
+	@cd scf-build && zip -r ../collector-scf.zip main configs/
+	@rm -rf scf-build
+	@rm -f main
+	@echo "✅ 云函数构建完成: collector-scf.zip"
+
+# 本地运行云函数模式
+run-serverless:
+	@echo "☁️  云函数模式启动..."
+	@if [ -f "$(CONFIGS_DIR)/config.serverless.yaml" ]; then \
+		go run ./main.go --config=$(CONFIGS_DIR)/config.serverless.yaml; \
+	else \
+		echo "❌ 错误: 云函数配置文件不存在: $(CONFIGS_DIR)/config.serverless.yaml"; \
+		exit 1; \
+	fi
+
+# 部署到远程服务器
+deploy:
+	@if [ -z "$(SERVER)" ]; then \
+		echo "❌ 请指定服务器地址"; \
+		echo "使用方法: make deploy SERVER=ubuntu@43.132.204.177"; \
+		exit 1; \
+	fi
+	@if [ ! -f "collector-scf.zip" ]; then \
+		echo "❌ 错误: collector-scf.zip 文件不存在"; \
+		echo "请先运行 'make build-scf' 构建云函数包"; \
+		exit 1; \
+	fi
+	@echo "🚀 正在部署到远程服务器: $(SERVER)"
+	@echo "📦 上传文件: collector-scf.zip"
+	@scp collector-scf.zip $(SERVER):/tmp/
+	@echo "✅ 部署完成: collector-scf.zip 已上传到 $(SERVER):/tmp/"
+

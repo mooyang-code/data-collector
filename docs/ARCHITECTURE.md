@@ -202,7 +202,7 @@ type App interface {
 // 使用示例：Binance App
 type BinanceApp struct {
     *core.BaseApp
-    client *api.Client
+    accessClient *api.Client
 }
 
 func init() {
@@ -758,7 +758,7 @@ collectors:
 internal/source/{category}/{name}/
 ├── app.go              # App实现
 ├── api/                # API客户端
-│   ├── client.go
+│   ├── accessClient.go
 │   └── types.go
 └── collectors/         # 采集器实现
     └── {datatype}.go
@@ -776,7 +776,7 @@ import (
 
 type App struct {
     *app.BaseApp
-    client *api.Client
+    accessClient *api.Client
 }
 
 func init() {
@@ -792,19 +792,19 @@ func init() {
 func NewApp(config *app.AppConfig) (app.App, error) {
     baseApp := app.NewBaseApp(config)
     
-    client, err := api.NewClient(config.API)
+    accessClient, err := api.NewClient(config.API)
     if err != nil {
         return nil, err
     }
     
     app := &App{
         BaseApp: baseApp,
-        client:  client,
+        accessClient:  accessClient,
     }
     
     // 注册采集器
-    app.RegisterCollector(NewKlineCollector(client))
-    app.RegisterCollector(NewTickerCollector(client))
+    app.RegisterCollector(NewKlineCollector(accessClient))
+    app.RegisterCollector(NewTickerCollector(accessClient))
     
     return app, nil
 }
@@ -827,7 +827,7 @@ func init() {
 
 type KlineCollector struct {
     *collector.BaseCollector
-    client *api.Client
+    accessClient *api.Client
 }
 
 func (c *KlineCollector) Initialize(ctx context.Context) error {
@@ -882,12 +882,12 @@ func (c *BaseFundingCollector) Initialize(ctx context.Context) error {
 // internal/source/market/binance/collectors/funding.go
 type FundingCollector struct {
     *funding.BaseFundingCollector
-    client *api.Client
+    accessClient *api.Client
 }
 
 func (c *FundingCollector) collect(ctx context.Context) error {
     // 具体采集逻辑
-    rates, err := c.client.GetFundingRates()
+    rates, err := c.accessClient.GetFundingRates()
     if err != nil {
         return err
     }
@@ -941,7 +941,7 @@ func (c *KlineCollector) collectKlines() error {
         batch := symbols[i:end]
         
         // 批量请求
-        klines, err := c.client.GetBatchKlines(batch)
+        klines, err := c.accessClient.GetBatchKlines(batch)
         if err != nil {
             log.Errorf("批次失败: %v", err)
             continue
@@ -1027,7 +1027,7 @@ func (app *App) HealthCheck() HealthStatus {
     }
     
     // 检查API连接
-    if err := app.client.Ping(); err != nil {
+    if err := app.accessClient.Ping(); err != nil {
         status.Checks["api"] = CheckResult{
             Status: "unhealthy",
             Error:  err.Error(),

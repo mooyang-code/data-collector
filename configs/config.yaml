@@ -5,6 +5,16 @@ system:
   environment: "development"
   timezone: "UTC"
 
+# 运行时模式配置
+runtime:
+  mode: "serverless"  # standalone | serverless
+  serverless:
+    provider: "tencent"  # tencent | aws | aliyun
+    enable_local_timer: false  # 云函数模式下是否保留本地定时器
+    task_store:
+      type: "bleve"  # 使用Bleve作为任务状态存储
+      path: "./data/tasks"  # Bleve索引存储路径
+
 # 日志配置
 logging:
   level: "info"
