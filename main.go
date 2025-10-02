@@ -12,6 +12,7 @@ import (
 	"github.com/mooyang-code/data-collector/internal/config"
 	"github.com/mooyang-code/data-collector/internal/core/app"
 	"github.com/mooyang-code/data-collector/internal/core/event"
+	"github.com/mooyang-code/data-collector/internal/serverless"
 
 	// 导入所有数据源,及其采集器，触发自注册
 	_ "github.com/mooyang-code/data-collector/internal/source/market/binance"
@@ -21,7 +22,7 @@ import (
 func main() {
 	// 解析命令行参数
 	var configFile string
-	flag.StringVar(&configFile, "config", "../configs/config.yaml", "配置文件路径")
+	flag.StringVar(&configFile, "config", "configs/config.yaml", "配置文件路径")
 	flag.Parse()
 
 	// 设置日志
@@ -42,6 +43,7 @@ func main() {
 
 	log.Printf("系统配置加载成功: %s v%s", mainConfig.System.Name, mainConfig.System.Version)
 	log.Printf("环境: %s", mainConfig.System.Environment)
+	log.Printf("运行模式: %s", mainConfig.Runtime.Mode)
 
 	// 创建主context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -63,33 +65,53 @@ func main() {
 		EventBus:      eventBus,
 	})
 
-	// 加载并初始化所有App
-	if err := loadApps(ctx, mainConfig, sourceConfigs, appManager, eventBus); err != nil {
-		log.Fatalf("加载Apps失败: %v", err)
+	// 根据运行模式选择启动方式
+	switch mainConfig.Runtime.Mode {
+	case "serverless":
+		// 云函数模式
+		log.Println("启动云函数模式...")
+
+		// 创建云函数处理器
+		handler, err := serverless.NewHandler(mainConfig, appManager)
+		if err != nil {
+			log.Fatalf("创建云函数处理器失败: %v", err)
+		}
+
+		// 启动云函数处理器
+		handler.Start()
+
+	default:
+		// 独立运行模式（默认）
+		log.Println("启动独立运行模式...")
+
+		// 加载并初始化所有App
+		if err := loadApps(ctx, mainConfig, sourceConfigs, appManager, eventBus); err != nil {
+			log.Fatalf("加载Apps失败: %v", err)
+		}
+
+		log.Println("所有组件已启动，系统运行中...")
+
+		// 打印运行状态
+		printStatus(appManager)
+
+		// 等待退出信号
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+		<-sigChan
+		log.Println("收到退出信号，开始关闭系统...")
+
+		// 优雅关闭
+		// 停止所有App
+		if err := appManager.Shutdown(ctx); err != nil {
+			log.Printf("停止Apps时发生错误: %v", err)
+		}
+
+		// 停止事件总线
+		eventBus.Stop(ctx)
+
+		log.Println("系统已安全关闭")
 	}
-
-	log.Println("所有组件已启动，系统运行中...")
-
-	// 打印运行状态
-	printStatus(appManager)
-
-	// 等待退出信号
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	<-sigChan
-	log.Println("收到退出信号，开始关闭系统...")
-
-	// 优雅关闭
-	// 停止所有App
-	if err := appManager.Shutdown(ctx); err != nil {
-		log.Printf("停止Apps时发生错误: %v", err)
-	}
-
-	// 停止事件总线
-	eventBus.Stop(ctx)
-
-	log.Println("系统已安全关闭")
 }
 
 // loadApps 加载所有配置的App
