@@ -89,7 +89,7 @@ func (c *APICacheClient) initCache() error {
 	// 创建缓存实例
 	cacher, err := apicache.NewCache(
 		TaskInstanceCache{
-			AccessUrl: c.cacheURL + "/moox-api/t_collector_task_instances", // moox的任务实例接口
+			AccessUrl: c.cacheURL + "/api/t_collector_task_instances", // moox的任务实例接口
 		},
 	)
 	if err != nil {
