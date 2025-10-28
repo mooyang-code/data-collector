@@ -1,11 +1,13 @@
 
+scf-build/
 data-collector
 release/*
-.claude/
+**/.claude/
 bin/
 *.log
 *.exe
 .DS_Store
 .idea/
 .vscode/
-*.zip
+**/*.zip
+configs/trpc_go.yaml

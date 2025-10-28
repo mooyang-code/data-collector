@@ -38,7 +38,6 @@ type Timer struct {
 	RunCount   int64
 	ErrorCount int64
 	ticker     *time.Ticker
-	cancel     context.CancelFunc
 }
 
 type CollectorStatus struct {

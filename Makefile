@@ -47,7 +47,7 @@ help:
 	@echo "  build-collector    - 构建数据采集器"
 	@echo "  build-all          - 构建所有程序（现在只有主程序）"
 	@echo "  build              - build-all 的别名"
-	@echo "  build-scf          - 构建腾讯云函数版本"
+	@echo "  build-scf <版本号> - 构建腾讯云函数版本（需指定版本号，格式：vx.x.x）"
 	@echo "  clean              - 清理所有构建文件"
 	@echo ""
 	@echo "🗄️  数据管理:"
@@ -78,8 +78,8 @@ help:
 	@echo "  make build-all VERSION=v1.0.0  - 构建指定版本"
 	@echo "  make install VERSION=v1.0.0    - 安装指定版本到release目录"
 	@echo "  make dev-data                   - 快速设置开发环境"
-	@echo "  make build-scf                  - 构建云函数包"
-	@echo "  make deploy SERVER=ubuntu@43.132.204.177  - 部署到远程服务器"
+	@echo "  make build-scf v0.0.1           - 构建云函数包（必须指定版本号 vx.x.x）"
+	@echo "  make deploy SERVER=ubuntu@143.177.177.177  - 部署到远程服务器"
 
 # 安装依赖
 deps:
@@ -129,7 +129,7 @@ coverage:
 build-collector:
 	@echo "📦 正在构建 $(COLLECTOR_NAME) 版本 $(VERSION)..."
 	@mkdir -p $(BIN_DIR)
-	go build $(GO_BUILD_FLAGS) -o $(BIN_DIR)/$(COLLECTOR_NAME) ./main.go
+	go build $(GO_BUILD_FLAGS) -o $(BIN_DIR)/$(COLLECTOR_NAME) ./cmd/standalone/main.go
 
 # 构建所有程序（现在只有主程序）
 build-all: build-collector
@@ -168,9 +168,9 @@ dev-data: clean-data init-data
 dev:
 	@echo "🚀 开发模式启动..."
 	@if [ -f "$(CONFIGS_DIR)/config.yaml" ]; then \
-		go run ./main.go --config=$(CONFIGS_DIR)/config.yaml; \
+		go run ./cmd/standalone/main.go --config=$(CONFIGS_DIR)/config.yaml; \
 	else \
-		go run ./main.go; \
+		go run ./cmd/standalone/main.go; \
 	fi
 
 # 在构建目录运行服务
@@ -227,9 +227,9 @@ release: clean deps check
 		output_dir="release-dist/$(APP_NAME)-$(VERSION)-$$os-$$arch"; \
 		mkdir -p $$output_dir/bin; \
 		if [ "$$os" = "windows" ]; then \
-			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME).exe ./main.go; \
+			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME).exe ./cmd/standalone/main.go; \
 		else \
-			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME) ./main.go; \
+			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME) ./cmd/standalone/main.go; \
 		fi; \
 		mkdir -p $$output_dir/configs $$output_dir/data $$output_dir/log; \
 		if [ -d "$(CONFIGS_DIR)" ]; then cp -r $(CONFIGS_DIR)/* $$output_dir/configs/ 2>/dev/null || true; fi; \
@@ -357,26 +357,55 @@ test-all: test test-core test-model test-source test-storage perf-test integrati
 
 # 云函数相关目标
 build-scf:
-	@echo "🔨 正在构建腾讯云函数版本..."
-	GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o main ./main.go
-	@echo "📁 准备云函数配置文件..."
-	@mkdir -p scf-build/configs
-	@cp -r configs/* scf-build/configs/
-	@cp configs/config.serverless.yaml scf-build/configs/config.yaml
-	@cp main scf-build/
-	@echo "📦 打包云函数..."
-	@cd scf-build && zip -r ../collector-scf.zip main configs/
-	@rm -rf scf-build
-	@rm -f main
-	@echo "✅ 云函数构建完成: collector-scf.zip"
+	@# 检查是否提供了版本号参数
+	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+		echo "❌ 错误: 请提供版本号参数"; \
+		echo "使用方法: make build-scf v0.0.1"; \
+		exit 1; \
+	fi
+	@# 获取版本号参数（第一个非目标参数）
+	@SCF_VERSION="$(filter-out $@,$(MAKECMDGOALS))"; \
+	echo "📝 检查版本号格式: $$SCF_VERSION"; \
+	if ! echo "$$SCF_VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		echo "❌ 错误: 版本号格式不正确"; \
+		echo "正确格式: vx.x.x (例如: v0.0.1, v1.2.3)"; \
+		exit 1; \
+	fi; \
+	echo "✅ 版本号格式校验通过: $$SCF_VERSION"; \
+	echo "🔨 正在构建腾讯云函数版本..."; \
+	GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o main ./cmd/serverless/main.go; \
+	echo "📁 准备云函数配置文件..."; \
+	mkdir -p scf-build; \
+	cp -r configs/* scf-build/; \
+	echo "📝 更新配置文件版本号..."; \
+	if [ -f "scf-build/config.yaml" ]; then \
+		sed -i.bak "s/version: \".*\"/version: \"$$SCF_VERSION\"/" scf-build/config.yaml; \
+		rm -f scf-build/config.yaml.bak; \
+		echo "✅ 配置文件版本号已更新为: $$SCF_VERSION"; \
+	else \
+		echo "⚠️  警告: config.yaml 文件不存在"; \
+	fi; \
+	sed -i.bak "s/version: \".*\"/version: \"$$SCF_VERSION\"/" configs/config.yaml; \
+	rm -f configs/config.yaml.bak; \
+	echo "✅ 源配置文件版本号已更新为: $$SCF_VERSION"; \
+	cp main scf-build/; \
+	echo "📦 打包云函数..."; \
+	cd scf-build && zip -r ../collector-scf-$$SCF_VERSION.zip main *.yaml; \
+	rm -rf scf-build; \
+	rm -f main; \
+	echo "✅ 云函数构建完成: collector-scf-$$SCF_VERSION.zip"
+
+# 防止 Make 把版本号参数当作目标
+%:
+	@:
 
 # 本地运行云函数模式
 run-serverless:
 	@echo "☁️  云函数模式启动..."
-	@if [ -f "$(CONFIGS_DIR)/config.serverless.yaml" ]; then \
-		go run ./main.go --config=$(CONFIGS_DIR)/config.serverless.yaml; \
+	@if [ -f "$(CONFIGS_DIR)/config.yaml" ]; then \
+		go run ./cmd/serverless/main.go --config=$(CONFIGS_DIR)/config.yaml; \
 	else \
-		echo "❌ 错误: 云函数配置文件不存在: $(CONFIGS_DIR)/config.serverless.yaml"; \
+		echo "❌ 错误: 云函数配置文件不存在: $(CONFIGS_DIR)/config.yaml"; \
 		exit 1; \
 	fi
 
@@ -384,7 +413,7 @@ run-serverless:
 deploy:
 	@if [ -z "$(SERVER)" ]; then \
 		echo "❌ 请指定服务器地址"; \
-		echo "使用方法: make deploy SERVER=ubuntu@43.132.204.177"; \
+		echo "使用方法: make deploy SERVER=ubuntu@143.177.177.177"; \
 		exit 1; \
 	fi
 	@if [ ! -f "collector-scf.zip" ]; then \

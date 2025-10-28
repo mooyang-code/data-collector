@@ -51,7 +51,6 @@ func (m *Manager) CreateApp(config *AppConfig) error {
 	registry := GetRegistry()
 
 	// 配置已经是正确的格式
-
 	app, err := registry.CreateApp(config.ID, config)
 	if err != nil {
 		return fmt.Errorf("创建App失败: %w", err)

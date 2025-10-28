@@ -1,35 +1,13 @@
 # 主配置文件
 system:
   name: "multi-source-data-collector"
-  version: "2.0.0"
-  environment: "development"
+  version: "v1.0.30"
+  environment: "Production"
   timezone: "UTC"
-
-# 运行时模式配置
-runtime:
-  mode: "serverless"  # standalone | serverless
-  serverless:
-    provider: "tencent"  # tencent | aws | aliyun
-    enable_local_timer: false  # 云函数模式下是否保留本地定时器
-    task_store:
-      type: "bleve"  # 使用Bleve作为任务状态存储
-      path: "./data/tasks"  # Bleve索引存储路径
-
-# 日志配置
-logging:
-  level: "info"
-  format: "json"
-  output: 
-    - type: "console"
-      level: "info"
-    - type: "file"
-      path: "logs/collector.log"
-      rotation: "daily"
-      retention: 30
 
 # 事件总线配置
 event_bus:
-  type: "memory"  # memory, redis, kafka
+  type: "memory" 
   buffer_size: 10000
   workers: 10
   config:
@@ -37,32 +15,12 @@ event_bus:
       addr: "localhost:6379"
       db: 0
 
-# 存储配置
-storage:
-  default: "memory"
-  backends:
-    memory:
-      max_size: 1000000
-    clickhouse:
-      dsn: "tcp://localhost:9000/market_data"
-      batch_size: 1000
-      flush_interval: "10s"
-    redis:
-      addr: "localhost:6379"
-      ttl: "24h"
-    influxdb:
-      url: "http://localhost:8086"
-      bucket: "market_data"
-
-# 监控配置
-monitoring:
-  enabled: true
-  prometheus:
-    port: 9090
-    path: "/metrics"
-  health_check:
-    port: 8080
-    path: "/health"
+# 心跳配置
+heartbeat:
+  interval: "10s"
+  timeout: "5s"
+  retry_count: 3
+  retry_interval: "2s"
 
 # 数据源配置
 sources:

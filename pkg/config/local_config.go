@@ -1,0 +1,107 @@
+package config
+
+import (
+	"os"
+
+	"gopkg.in/yaml.v3"
+	"trpc.group/trpc-go/trpc-go/log"
+)
+
+// AppConfig 启动器配置（基于 config.yaml）
+type AppConfig struct {
+	System    *SystemConfig    `json:"system" yaml:"system"`       // 系统配置
+	EventBus  *EventBusConfig  `json:"event_bus" yaml:"event_bus"` // 事件总线配置
+	Heartbeat *HeartbeatConfig `json:"heartbeat" yaml:"heartbeat"` // 心跳配置
+	Sources   *SourcesConfig   `json:"sources" yaml:"sources"`     // 数据源配置
+}
+
+// SystemConfig 系统配置
+type SystemConfig struct {
+	Name        string `json:"name" yaml:"name"`
+	Version     string `json:"version" yaml:"version"`
+	Environment string `json:"environment" yaml:"environment"`
+	Timezone    string `json:"timezone" yaml:"timezone"`
+}
+
+// EventBusConfig 事件总线配置
+type EventBusConfig struct {
+	Type       string                 `json:"type" yaml:"type"`
+	BufferSize int                    `json:"buffer_size" yaml:"buffer_size"`
+	Workers    int                    `json:"workers" yaml:"workers"`
+	Config     map[string]interface{} `json:"config" yaml:"config"`
+}
+
+// HeartbeatConfig 心跳配置
+type HeartbeatConfig struct {
+	Interval      string `json:"interval" yaml:"interval"`
+	Timeout       string `json:"timeout" yaml:"timeout"`
+	RetryCount    int    `json:"retry_count" yaml:"retry_count"`
+	RetryInterval string `json:"retry_interval" yaml:"retry_interval"`
+}
+
+// SourcesConfig 数据源配置
+type SourcesConfig struct {
+	Market     []SourceConfig `json:"market" yaml:"market"`
+	Social     []SourceConfig `json:"social" yaml:"social"`
+	News       []SourceConfig `json:"news" yaml:"news"`
+	Blockchain []SourceConfig `json:"blockchain" yaml:"blockchain"`
+}
+
+// SourceConfig 数据源配置项
+type SourceConfig struct {
+	Name    string `json:"name" yaml:"name"`
+	Enabled bool   `json:"enabled" yaml:"enabled"`
+	Config  string `json:"config" yaml:"config"`
+}
+
+// DefaultConfig 默认配置
+func DefaultConfig() *AppConfig {
+	return &AppConfig{
+		System: &SystemConfig{
+			Name:        "multi-source-data-collector",
+			Version:     "2.0.0",
+			Environment: "development",
+			Timezone:    "UTC",
+		},
+		EventBus: &EventBusConfig{
+			Type:       "memory",
+			BufferSize: 10000,
+			Workers:    10,
+			Config:     make(map[string]interface{}),
+		},
+		Heartbeat: &HeartbeatConfig{
+			Interval:      "10s",
+			Timeout:       "5s",
+			RetryCount:    3,
+			RetryInterval: "2s",
+		},
+		Sources: &SourcesConfig{
+			Market: []SourceConfig{
+				{Name: "binance", Enabled: true, Config: "./sources/market/binance.yaml"},
+				{Name: "okx", Enabled: false, Config: "./sources/market/okx.yaml"},
+			},
+		},
+	}
+}
+
+// LoadConfigs 加载系统中各个模块配置
+func LoadConfigs(cfg *AppConfig) (*AppConfig, error) {
+	log.Info("正在加载应用配置...")
+
+	// 1. 尝试加载配置文件
+	if err := loadConfigFile(cfg); err != nil {
+		log.Warnf("加载配置文件失败，使用默认配置: %v", err)
+	}
+
+	log.Info("应用配置加载完成")
+	return cfg, nil
+}
+
+// loadConfigFile 加载配置文件
+func loadConfigFile(cfg *AppConfig) error {
+	data, err := os.ReadFile("./config.yaml")
+	if err != nil {
+		return err
+	}
+	return yaml.Unmarshal(data, cfg)
+}
