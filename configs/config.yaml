@@ -11,6 +11,11 @@ runtime:
   serverless:
     provider: "tencent"  # tencent | aws | aliyun
     enable_local_timer: false  # 云函数模式下是否保留本地定时器
+    # RPC配置
+    heartbeat_rpc:
+      target: "ip://43.132.204.177:9527"
+      namespace: "Production"
+      timeout: 5
     task_store:
       type: "bleve"  # 使用Bleve作为任务状态存储
       path: "./data/tasks"  # Bleve索引存储路径

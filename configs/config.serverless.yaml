@@ -17,6 +17,11 @@ runtime:
     moox_url: "${MOOX_SERVICE_URL}"
     # 缓存服务端点（获取任务配置）
     cache_endpoint: "${CACHE_SERVICE_URL}"
+    # 心跳RPC配置
+    heartbeat_rpc:
+      target: "trpc.moox.server.CloudNodeAPI"
+      namespace: "Production"
+      timeout: 10
     # 不再需要本地任务存储
     task_store:
       type: "none"
