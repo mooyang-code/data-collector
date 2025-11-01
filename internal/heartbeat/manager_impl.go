@@ -20,13 +20,12 @@ import (
 // manager 心跳管理器实现
 type manager struct {
 	config           Config
-	logger           logger.Logger
 	nodeInfo         *model.NodeInfo
 	taskManager      task.Manager
 	metricsCollector metrics.Collector
 
 	// 服务端信息
-	serverURL  string
+	serverIP   string
 	serverPort int
 	authToken  string
 	httpClient *http.Client
@@ -41,13 +40,14 @@ type manager struct {
 }
 
 // NewManager 创建新的心跳管理器
-func NewManager(cfg Config, log logger.Logger, nodeInfo *model.NodeInfo, taskManager task.Manager, metricsCollector metrics.Collector) Manager {
+func NewManager(cfg Config, nodeInfo *model.NodeInfo, taskManager task.Manager, metricsCollector metrics.Collector) Manager {
 	return &manager{
 		config:           cfg,
-		logger:           log.With("component", "heartbeat_manager"),
 		nodeInfo:         nodeInfo,
 		taskManager:      taskManager,
 		metricsCollector: metricsCollector,
+		serverIP:         cfg.ServerIP,
+		serverPort:       cfg.ServerPort,
 		httpClient: &http.Client{
 			Timeout: cfg.Timeout,
 		},
@@ -68,7 +68,7 @@ func (m *manager) Start(ctx context.Context) error {
 	go m.heartbeatLoop()
 
 	m.started = true
-	m.logger.Info("heartbeat manager started", "interval", m.config.Interval)
+	logger.Info("心跳管理器启动成功", "component", "heartbeat_manager", "interval", m.config.Interval)
 	return nil
 }
 
@@ -86,21 +86,23 @@ func (m *manager) Stop(ctx context.Context) error {
 	}
 
 	m.started = false
-	m.logger.Info("heartbeat manager stopped",
+	logger.Info("heartbeat manager stopped",
+		"component", "heartbeat_manager",
 		"report_count", m.reportCount,
 		"error_count", m.errorCount)
 	return nil
 }
 
 func (m *manager) Report(ctx context.Context) error {
-	if m.serverURL == "" {
-		m.logger.Debug("no server URL configured, skipping heartbeat report")
+	if m.serverIP == "" {
+		logger.Debug("no server IP configured, skipping heartbeat report", "component", "heartbeat_manager")
 		return nil
 	}
 
 	// 构建心跳负载
 	payload, err := m.buildHeartbeatPayload(ctx)
 	if err != nil {
+		logger.Error("failed to build heartbeat payload", "component", "heartbeat_manager", "error", err)
 		return fmt.Errorf("failed to build heartbeat payload: %w", err)
 	}
 
@@ -109,6 +111,7 @@ func (m *manager) Report(ctx context.Context) error {
 		m.mu.Lock()
 		m.errorCount++
 		m.mu.Unlock()
+		logger.Error("failed to send heartbeat", "component", "heartbeat_manager", "error", err, "report_count", m.reportCount)
 		return fmt.Errorf("failed to send heartbeat: %w", err)
 	}
 
@@ -117,57 +120,60 @@ func (m *manager) Report(ctx context.Context) error {
 	m.reportCount++
 	m.mu.Unlock()
 
-	m.logger.Debug("heartbeat report sent successfully")
+	logger.Debug("heartbeat report sent successfully", "component", "heartbeat_manager")
 	return nil
 }
 
 func (m *manager) HandleProbe(ctx context.Context, probeData map[string]interface{}) (*model.Response, error) {
-	m.logger.Info("handling heartbeat probe", "probe_data_keys", getMapKeys(probeData))
+	logger.Info("handling heartbeat probe", "component", "heartbeat_manager", "probe_data_keys", getMapKeys(probeData))
 
 	// 更新服务端信息
-	if serverURL, ok := probeData["server_url"].(string); ok {
-		m.serverURL = serverURL
-		m.logger.Info("server URL updated from probe", "server_url", serverURL)
+	if serverIP, ok := probeData["server_ip"].(string); ok {
+		m.serverIP = serverIP
+		logger.Info("server IP updated from probe", "component", "heartbeat_manager", "server_ip", serverIP)
 	}
 
 	if serverPort, ok := probeData["server_port"].(float64); ok {
 		m.serverPort = int(serverPort)
-		m.logger.Info("server port updated from probe", "server_port", m.serverPort)
+		logger.Info("server port updated from probe", "component", "heartbeat_manager", "server_port", m.serverPort)
 	}
 
 	if authToken, ok := probeData["auth_token"].(string); ok {
 		m.authToken = authToken
-		m.logger.Info("auth token updated from probe")
+		logger.Info("auth token updated from probe", "component", "heartbeat_manager")
 	}
 
 	// 构建响应数据
-	responseData, err := m.buildProbeResponse(ctx)
+	probeResponse, err := m.buildProbeResponse(ctx)
 	if err != nil {
-		m.logger.Error("failed to build probe response", "error", err)
+		logger.Error("failed to build probe response", "component", "heartbeat_manager", "error", err)
 		return &model.Response{
 			Success: false,
 			Message: fmt.Sprintf("failed to build response: %v", err),
 		}, nil
 	}
 
+	logger.Info("probe handled successfully", "component", "heartbeat_manager",
+		"node_id", probeResponse.NodeID, "state", probeResponse.State)
 	return &model.Response{
 		Success:   true,
 		Message:   "probe handled successfully",
-		Data:      responseData,
+		Data:      probeResponse,
 		Timestamp: time.Now(),
 	}, nil
 }
 
-func (m *manager) UpdateServerInfo(serverURL string, serverPort int, authToken string) error {
+func (m *manager) UpdateServerInfo(serverIP string, serverPort int, authToken string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.serverURL = serverURL
+	m.serverIP = serverIP
 	m.serverPort = serverPort
 	m.authToken = authToken
 
-	m.logger.Info("server info updated",
-		"server_url", serverURL,
+	logger.Info("server info updated",
+		"component", "heartbeat_manager",
+		"server_ip", serverIP,
 		"server_port", serverPort,
 		"has_auth_token", authToken != "")
 	return nil
@@ -181,7 +187,11 @@ func (m *manager) heartbeatLoop() {
 		select {
 		case <-m.ticker.C:
 			if err := m.Report(context.Background()); err != nil {
-				m.logger.Error("heartbeat report failed", "error", err)
+				logger.Error("heartbeat report failed", "component", "heartbeat_manager", "error", err,
+					"report_count", m.reportCount, "error_count", m.errorCount)
+			} else {
+				logger.Debug("heartbeat loop report completed",
+					"component", "heartbeat_manager", "report_count", m.reportCount)
 			}
 		}
 	}
@@ -191,7 +201,7 @@ func (m *manager) buildHeartbeatPayload(ctx context.Context) (*model.HeartbeatPa
 	// 获取运行中的任务
 	runningTasks, err := m.taskManager.GetRunningTasks(ctx)
 	if err != nil {
-		m.logger.Warn("failed to get running tasks for heartbeat", "error", err)
+		logger.Warn("failed to get running tasks for heartbeat", "component", "heartbeat_manager", "error", err)
 		runningTasks = []*model.TaskSummary{}
 	}
 
@@ -240,20 +250,41 @@ func (m *manager) collectNodeMetrics() *model.NodeMetrics {
 }
 
 func (m *manager) sendHeartbeat(ctx context.Context, payload *model.HeartbeatPayload) error {
-	url := fmt.Sprintf("%s:%d/api/v1/heartbeat", m.serverURL, m.serverPort)
+	logger.Info("主动上报心跳", "component", "heartbeat_manager", "node_id", payload.NodeID)
+	if m.serverIP == "" {
+		if m.config.ServerIP != "" {
+			m.serverIP = m.config.ServerIP
+		}
+	}
+	if m.serverPort == 0 {
+		if m.config.ServerPort != 0 {
+			m.serverPort = m.config.ServerPort
+		}
+	}
+
+	url := fmt.Sprintf("http://%s:%d/gateway/cloudnode/ReportHeartbeat", m.serverIP, m.serverPort)
+
+	// 构建符合后台API规范的请求体
+	apiPayload := map[string]interface{}{
+		"node_id":   payload.NodeID,
+		"node_type": payload.NodeType,
+		"metadata":  payload.Metadata,
+	}
 
 	// 序列化负载
-	data, err := json.Marshal(payload)
+	data, err := json.Marshal(apiPayload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal heartbeat payload: %w", err)
 	}
+	logger.Info("sendHeartbeat req data:" + string(data))
 
 	// 使用retry库进行重试
-	return retry.Do(
+	if err := retry.Do(
 		func() error {
 			// 创建请求 (每次重试都要重新创建，因为body会被消费)
 			req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(data))
 			if err != nil {
+				logger.Error("failed to create heartbeat request", "component", "heartbeat_manager", "error", err, "url", url)
 				return fmt.Errorf("failed to create heartbeat request: %w", err)
 			}
 
@@ -266,15 +297,18 @@ func (m *manager) sendHeartbeat(ctx context.Context, payload *model.HeartbeatPay
 			// 发送请求
 			resp, err := m.httpClient.Do(req)
 			if err != nil {
+				logger.Error("heartbeat HTTP request failed", "component", "heartbeat_manager", "error", err, "url", url)
 				return err
 			}
 			defer resp.Body.Close()
 
 			// 检查响应状态
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				m.logger.Debug("heartbeat sent successfully", "status", resp.StatusCode)
+				logger.Debug("heartbeat sent successfully", "component", "heartbeat_manager", "status", resp.StatusCode)
 				return nil
 			}
+			logger.Error("heartbeat request failed with non-200 status", "component", "heartbeat_manager",
+				"status", resp.StatusCode, "status_text", http.StatusText(resp.StatusCode))
 			return fmt.Errorf("heartbeat request failed with status: %d", resp.StatusCode)
 		},
 		retry.Attempts(5),
@@ -282,65 +316,88 @@ func (m *manager) sendHeartbeat(ctx context.Context, payload *model.HeartbeatPay
 		retry.DelayType(retry.BackOffDelay),
 		retry.LastErrorOnly(true),
 		retry.OnRetry(func(n uint, err error) {
-			m.logger.Debug("retrying heartbeat request", "attempt", n+1, "error", err)
+			logger.Warn("retrying heartbeat request", "component", "heartbeat_manager", "attempt", n+1, "error", err, "url", url)
 		}),
 		retry.Context(ctx),
-	)
+	); err != nil {
+		logger.Error("heartbeat send failed after all retries", "component", "heartbeat_manager", "error", err,
+			"attempts", 5, "url", url)
+		return err
+	}
+
+	logger.Info("心跳上报成功")
+	return nil
 }
 
-func (m *manager) buildProbeResponse(ctx context.Context) (map[string]interface{}, error) {
+func (m *manager) buildProbeResponse(ctx context.Context) (*model.ProbeResponse, error) {
 	// 获取运行中的任务
 	runningTasks, err := m.taskManager.GetRunningTasks(ctx)
 	if err != nil {
-		m.logger.Warn("failed to get running tasks for probe response", "error", err)
+		logger.Warn("failed to get running tasks for probe response", "component", "heartbeat_manager", "error", err)
 		runningTasks = []*model.TaskSummary{}
 	}
 
 	// 获取所有任务
 	allTasks, err := m.taskManager.ListTasks(ctx)
 	if err != nil {
-		m.logger.Warn("failed to get all tasks for probe response", "error", err)
+		logger.Warn("failed to get all tasks for probe response", "component", "heartbeat_manager", "error", err)
 		allTasks = []*model.Task{}
 	}
 
 	// 构建任务统计
-	taskStats := map[string]interface{}{
-		"total":   len(allTasks),
-		"running": len(runningTasks),
-		"pending": 0,
-		"stopped": 0,
-		"error":   0,
+	taskStats := model.TaskStatsInfo{
+		Total:   len(allTasks),
+		Running: len(runningTasks),
+		Pending: 0,
+		Stopped: 0,
+		Error:   0,
 	}
 
 	for _, task := range allTasks {
 		switch task.Status {
 		case model.TaskStatusPending:
-			taskStats["pending"] = taskStats["pending"].(int) + 1
+			taskStats.Pending++
 		case model.TaskStatusStopped:
-			taskStats["stopped"] = taskStats["stopped"].(int) + 1
+			taskStats.Stopped++
 		case model.TaskStatusError:
-			taskStats["error"] = taskStats["error"].(int) + 1
+			taskStats.Error++
 		}
 	}
 
-	return map[string]interface{}{
-		"node_info":     m.nodeInfo,
-		"running_tasks": runningTasks,
-		"task_stats":    taskStats,
-		"metrics":       m.collectNodeMetrics(),
-		"system_info": map[string]interface{}{
-			"go_version":    runtime.Version(),
-			"os":            runtime.GOOS,
-			"arch":          runtime.GOARCH,
-			"num_cpu":       runtime.NumCPU(),
-			"num_goroutine": runtime.NumGoroutine(),
+	// 构建系统信息
+	systemInfo := model.SystemInfo{
+		GoVersion:    runtime.Version(),
+		OS:           runtime.GOOS,
+		Arch:         runtime.GOARCH,
+		NumCPU:       runtime.NumCPU(),
+		NumGoroutine: runtime.NumGoroutine(),
+	}
+
+	// 构建心跳统计信息
+	heartbeatInfo := model.HeartbeatInfo{
+		LastReport:  m.lastReport,
+		ReportCount: m.reportCount,
+		ErrorCount:  m.errorCount,
+		Interval:    m.config.Interval.String(),
+		ServerIP:    m.serverIP,
+		ServerPort:  m.serverPort,
+	}
+
+	// 获取指标
+	nodeMetrics := m.collectNodeMetrics()
+
+	return &model.ProbeResponse{
+		NodeID: m.nodeInfo.NodeID,
+		State:  "running",
+		Details: model.ProbeDetails{
+			NodeInfo:      m.nodeInfo,
+			RunningTasks:  runningTasks,
+			TaskStats:     taskStats,
+			Metrics:       nodeMetrics,
+			SystemInfo:    systemInfo,
+			HeartbeatInfo: heartbeatInfo,
 		},
-		"heartbeat_stats": map[string]interface{}{
-			"last_report":  m.lastReport,
-			"report_count": m.reportCount,
-			"error_count":  m.errorCount,
-			"interval":     m.config.Interval.String(),
-		},
+		Timestamp: time.Now(),
 	}, nil
 }
 

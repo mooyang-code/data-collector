@@ -34,7 +34,7 @@ type Store interface {
 
 // ServerConfig 服务端配置
 type ServerConfig struct {
-	ServerURL         string `json:"server_url" yaml:"server_url"`
+	ServerIP          string `json:"server_ip" yaml:"server_ip"`
 	ServerPort        int    `json:"server_port" yaml:"server_port"`
 	AuthToken         string `json:"auth_token" yaml:"auth_token"`
 	HeartbeatInterval int    `json:"heartbeat_interval" yaml:"heartbeat_interval"`

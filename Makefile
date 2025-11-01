@@ -129,7 +129,7 @@ coverage:
 build-collector:
 	@echo "📦 正在构建 $(COLLECTOR_NAME) 版本 $(VERSION)..."
 	@mkdir -p $(BIN_DIR)
-	go build $(GO_BUILD_FLAGS) -o $(BIN_DIR)/$(COLLECTOR_NAME) ./main.go
+	go build $(GO_BUILD_FLAGS) -o $(BIN_DIR)/$(COLLECTOR_NAME) ./cmd/standalone/main.go
 
 # 构建所有程序（现在只有主程序）
 build-all: build-collector
@@ -168,9 +168,9 @@ dev-data: clean-data init-data
 dev:
 	@echo "🚀 开发模式启动..."
 	@if [ -f "$(CONFIGS_DIR)/config.yaml" ]; then \
-		go run ./main.go --config=$(CONFIGS_DIR)/config.yaml; \
+		go run ./cmd/standalone/main.go --config=$(CONFIGS_DIR)/config.yaml; \
 	else \
-		go run ./main.go; \
+		go run ./cmd/standalone/main.go; \
 	fi
 
 # 在构建目录运行服务
@@ -227,9 +227,9 @@ release: clean deps check
 		output_dir="release-dist/$(APP_NAME)-$(VERSION)-$$os-$$arch"; \
 		mkdir -p $$output_dir/bin; \
 		if [ "$$os" = "windows" ]; then \
-			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME).exe ./main.go; \
+			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME).exe ./cmd/standalone/main.go; \
 		else \
-			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME) ./main.go; \
+			GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o $$output_dir/bin/$(COLLECTOR_NAME) ./cmd/standalone/main.go; \
 		fi; \
 		mkdir -p $$output_dir/configs $$output_dir/data $$output_dir/log; \
 		if [ -d "$(CONFIGS_DIR)" ]; then cp -r $(CONFIGS_DIR)/* $$output_dir/configs/ 2>/dev/null || true; fi; \
@@ -358,7 +358,7 @@ test-all: test test-core test-model test-source test-storage perf-test integrati
 # 云函数相关目标
 build-scf:
 	@echo "🔨 正在构建腾讯云函数版本..."
-	GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o main ./main.go
+	GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o main ./cmd/serverless/main.go
 	@echo "📁 准备云函数配置文件..."
 	@mkdir -p scf-build/configs
 	@cp -r configs/* scf-build/configs/
@@ -374,7 +374,7 @@ build-scf:
 run-serverless:
 	@echo "☁️  云函数模式启动..."
 	@if [ -f "$(CONFIGS_DIR)/config.serverless.yaml" ]; then \
-		go run ./main.go --config=$(CONFIGS_DIR)/config.serverless.yaml; \
+		go run ./cmd/serverless/main.go --config=$(CONFIGS_DIR)/config.serverless.yaml; \
 	else \
 		echo "❌ 错误: 云函数配置文件不存在: $(CONFIGS_DIR)/config.serverless.yaml"; \
 		exit 1; \

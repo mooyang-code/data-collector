@@ -5,21 +5,6 @@ system:
   environment: "development"
   timezone: "UTC"
 
-# 运行时模式配置
-runtime:
-  mode: "serverless"  # standalone | serverless
-  serverless:
-    provider: "tencent"  # tencent | aws | aliyun
-    enable_local_timer: false  # 云函数模式下是否保留本地定时器
-    # RPC配置
-    heartbeat_rpc:
-      target: "ip://43.132.204.177:9527"
-      namespace: "Production"
-      timeout: 5
-    task_store:
-      type: "bleve"  # 使用Bleve作为任务状态存储
-      path: "./data/tasks"  # Bleve索引存储路径
-
 # 日志配置
 logging:
   level: "info"
@@ -66,8 +51,17 @@ monitoring:
     port: 9090
     path: "/metrics"
   health_check:
-    port: 8080
+    port: 20103
     path: "/health"
+
+# 心跳配置
+heartbeat:
+  interval: "10s"
+  timeout: "5s"
+  retry_count: 3
+  retry_interval: "2s"
+  server_ip: "43.132.204.177"
+  server_port: 20103
 
 # 数据源配置
 sources:

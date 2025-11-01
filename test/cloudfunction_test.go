@@ -19,7 +19,9 @@ func TestCloudFunctionHandler(t *testing.T) {
 	bs := bootstrap.New(cfg)
 
 	// 创建云函数处理器
-	h := handler.NewCloudFunctionHandler(bs)
+	_, _, heartbeatManager := bs.GetManagers()
+	hbConfig := bs.GetConfig().Heartbeat
+	h := handler.NewCloudFunctionHandler(bs, heartbeatManager, hbConfig)
 
 	// 创建带有云函数上下文的context
 	funcCtx := &functioncontext.FunctionContext{
@@ -36,8 +38,7 @@ func TestCloudFunctionHandler(t *testing.T) {
 
 	// 测试健康检查事件
 	healthEvent := model.CloudFunctionEvent{
-		Type:      model.EventTypeHealth,
-		Action:    "health_check",
+		Action:    model.EventActionHealth,
 		Data:      make(map[string]interface{}),
 		RequestID: "test-health-001",
 	}
@@ -81,7 +82,9 @@ func TestAPIGatewayHandler(t *testing.T) {
 	bs := bootstrap.New(cfg)
 	
 	// 创建云函数处理器
-	h := handler.NewCloudFunctionHandler(bs)
+	_, _, heartbeatManager := bs.GetManagers()
+	hbConfig := bs.GetConfig().Heartbeat
+	h := handler.NewCloudFunctionHandler(bs, heartbeatManager, hbConfig)
 	
 	if h == nil {
 		t.Fatal("Failed to create CloudFunctionHandler")

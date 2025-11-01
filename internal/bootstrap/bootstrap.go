@@ -3,13 +3,13 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime"
 	"sync"
 	"time"
 
-	"github.com/mooyang-code/data-collector/internal/collector"
 	_ "github.com/mooyang-code/data-collector/internal/collector/exchanges" // 注册采集器
+
+	"github.com/mooyang-code/data-collector/internal/collector"
 	"github.com/mooyang-code/data-collector/internal/config"
 	"github.com/mooyang-code/data-collector/internal/event"
 	"github.com/mooyang-code/data-collector/internal/heartbeat"
@@ -89,7 +89,7 @@ func DefaultConfig() *Config {
 		Metrics:  metrics.DefaultConfig,
 
 		Task:      task.DefaultConfig,
-		Heartbeat: heartbeat.DefaultConfig,
+		Heartbeat: heartbeat.HeartbeatDefaultConfig,
 		Config:    config.DefaultConfig,
 	}
 }
@@ -113,30 +113,15 @@ func New(cfg *Config) *Bootstrap {
 func (b *Bootstrap) Init(ctx context.Context) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
+	fmt.Println("bootstrap 开始初始化")
 	if b.state != StateUninitialized {
-		return fmt.Errorf("bootstrap already initialized")
+		fmt.Println("bootstrap already initialized,state:", b.state)
+		return nil
 	}
 
 	b.state = StateInitializing
 
-	// 动态获取NodeID（如果为空）
-	if b.config.NodeID == "" {
-		hostname, err := os.Hostname()
-		if err != nil || hostname == "" {
-			hostname = "unknown-host"
-		}
-		b.config.NodeID = hostname
-	}
-
-	// 动态判断NodeType（如果为空）
-	if b.config.NodeType == "" {
-		// 默认为独立运行模式，使用操作系统类型
-		b.config.NodeType = runtime.GOOS // linux, darwin, windows 等
-	}
-
 	// 初始化日志
-	b.config.Logger.NodeID = b.config.NodeID
 	b.logger = logger.New(b.config.Logger)
 	logger.SetGlobal(b.logger)
 
@@ -178,7 +163,7 @@ func (b *Bootstrap) Init(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize managers: %w", err)
 	}
 
-	b.logger.Info("bootstrap initialized successfully")
+	fmt.Println("bootstrap 初始化完成")
 	return nil
 }
 
@@ -187,10 +172,10 @@ func (b *Bootstrap) Start(ctx context.Context) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	fmt.Println("Bootstrap 系统开始启动...")
 	if b.state != StateInitializing {
 		return fmt.Errorf("bootstrap not initialized or already started")
 	}
-	b.logger.Info("starting bootstrap")
 
 	// 启动事件总线
 	if err := b.eventBus.Start(ctx); err != nil {
@@ -220,7 +205,7 @@ func (b *Bootstrap) Start(ctx context.Context) error {
 	b.startMetricsReporting()
 
 	b.state = StateRunning
-	b.logger.Info("bootstrap started successfully",
+	b.logger.Info("Bootstrap 系统启动成功",
 		"startup_duration_ms", time.Since(b.startTime).Milliseconds())
 	return nil
 }
@@ -257,7 +242,6 @@ func (b *Bootstrap) Stop(ctx context.Context) error {
 		b.logger.Error("failed to stop event bus", "error", err)
 	}
 
-
 	b.state = StateStopped
 	b.logger.Info("bootstrap stopped successfully")
 
@@ -281,6 +265,11 @@ func (b *Bootstrap) GetNodeInfo() *model.NodeInfo {
 // GetManagers 获取管理器实例（用于handler调用）
 func (b *Bootstrap) GetManagers() (task.Manager, config.Manager, heartbeat.Manager) {
 	return b.taskManager, b.configManager, b.heartbeatManager
+}
+
+// GetConfig 获取配置实例
+func (b *Bootstrap) GetConfig() *Config {
+	return b.config
 }
 
 // GetLogger 获取日志实例
@@ -309,8 +298,8 @@ func (b *Bootstrap) initManagers() error {
 	// 初始化任务管理器
 	b.taskManager = task.NewManager(b.config.Task, b.logger, b.eventBus, b.metricsCollector, b.collectorManager)
 
-	// 初始化心跳管理器
-	b.heartbeatManager = heartbeat.NewManager(b.config.Heartbeat, b.logger, b.nodeInfo, b.taskManager, b.metricsCollector)
+	// 初始化心跳管理器（定时上报心跳）
+	b.heartbeatManager = heartbeat.NewManager(b.config.Heartbeat, b.nodeInfo, b.taskManager, b.metricsCollector)
 	return nil
 }
 

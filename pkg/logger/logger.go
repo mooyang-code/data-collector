@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"time"
 )
 
 // Logger 结构化日志接口
@@ -14,7 +13,48 @@ type Logger interface {
 	Warn(msg string, args ...interface{})
 	Error(msg string, args ...interface{})
 	With(args ...interface{}) Logger
-	WithContext(ctx context.Context) Logger
+}
+
+// contextKey 是用于在 context 中存储 Logger 的 key
+type contextKey struct{}
+
+// WithContext 将 Logger 存储到 context 中
+func WithContext(ctx context.Context, logger Logger) context.Context {
+	return context.WithValue(ctx, contextKey{}, logger)
+}
+
+// FromContext 从 context 中获取 Logger
+func FromContext(ctx context.Context) (Logger, bool) {
+	logger, ok := ctx.Value(contextKey{}).(Logger)
+	return logger, ok
+}
+
+// InfoContextf 从 context 中获取 Logger 并输出 info 日志，自动添加前缀
+func InfoContextf(ctx context.Context, msg string, args ...interface{}) {
+	if logger, ok := FromContext(ctx); ok {
+		logger.Info(msg, args...)
+	}
+}
+
+// DebugContextf 从 context 中获取 Logger 并输出 debug 日志，自动添加前缀
+func DebugContextf(ctx context.Context, msg string, args ...interface{}) {
+	if logger, ok := FromContext(ctx); ok {
+		logger.Debug(msg, args...)
+	}
+}
+
+// WarnContextf 从 context 中获取 Logger 并输出 warn 日志，自动添加前缀
+func WarnContextf(ctx context.Context, msg string, args ...interface{}) {
+	if logger, ok := FromContext(ctx); ok {
+		logger.Warn(msg, args...)
+	}
+}
+
+// ErrorContextf 从 context 中获取 Logger 并输出 error 日志，自动添加前缀
+func ErrorContextf(ctx context.Context, msg string, args ...interface{}) {
+	if logger, ok := FromContext(ctx); ok {
+		logger.Error(msg, args...)
+	}
 }
 
 // Config 日志配置
@@ -78,19 +118,19 @@ func NewDefault() Logger {
 }
 
 func (l *structuredLogger) Debug(msg string, args ...interface{}) {
-	l.logger.Debug(msg, l.parseArgs(args...)...)
+	l.logger.Debug("[***DATA-COLLECTOR***] "+msg, l.parseArgs(args...)...)
 }
 
 func (l *structuredLogger) Info(msg string, args ...interface{}) {
-	l.logger.Info(msg, l.parseArgs(args...)...)
+	l.logger.Info("[***DATA-COLLECTOR***] "+msg, l.parseArgs(args...)...)
 }
 
 func (l *structuredLogger) Warn(msg string, args ...interface{}) {
-	l.logger.Warn(msg, l.parseArgs(args...)...)
+	l.logger.Warn("[***DATA-COLLECTOR***] "+msg, l.parseArgs(args...)...)
 }
 
 func (l *structuredLogger) Error(msg string, args ...interface{}) {
-	l.logger.Error(msg, l.parseArgs(args...)...)
+	l.logger.Error("[***DATA-COLLECTOR***] "+msg, l.parseArgs(args...)...)
 }
 
 func (l *structuredLogger) With(args ...interface{}) Logger {
@@ -100,27 +140,10 @@ func (l *structuredLogger) With(args ...interface{}) Logger {
 	}
 }
 
-func (l *structuredLogger) WithContext(ctx context.Context) Logger {
-	// 从context中提取请求ID等信息
-	attrs := make([]interface{}, 0)
-	
-	if requestID := ctx.Value("request_id"); requestID != nil {
-		attrs = append(attrs, "request_id", requestID)
-	}
-	
-	if traceID := ctx.Value("trace_id"); traceID != nil {
-		attrs = append(attrs, "trace_id", traceID)
-	}
-
-	attrs = append(attrs, "timestamp", time.Now().UTC())
-	
-	return l.With(attrs...)
-}
-
 // parseArgs 解析日志参数，支持键值对和单个值
 func (l *structuredLogger) parseArgs(args ...interface{}) []interface{} {
 	result := make([]interface{}, 0, len(args))
-	
+
 	for i := 0; i < len(args); i += 2 {
 		if i+1 < len(args) {
 			// 键值对
@@ -130,78 +153,40 @@ func (l *structuredLogger) parseArgs(args ...interface{}) []interface{} {
 			result = append(result, "value", args[i])
 		}
 	}
-	
+
 	return result
+}
+
+// With 创建带上下文的日志实例
+func With(args ...interface{}) Logger {
+	globalLogger := NewDefault()
+	return globalLogger.With(args...)
 }
 
 // Global 全局日志实例
 var Global Logger = NewDefault()
 
 // SetGlobal 设置全局日志实例
-func SetGlobal(logger Logger) {
-	Global = logger
+func SetGlobal(l Logger) {
+	Global = l
 }
 
-// 便捷函数
+// Debug 输出调试信息
 func Debug(msg string, args ...interface{}) {
 	Global.Debug(msg, args...)
 }
 
+// Info 输出普通信息
 func Info(msg string, args ...interface{}) {
 	Global.Info(msg, args...)
 }
 
+// Warn 输出警告信息
 func Warn(msg string, args ...interface{}) {
 	Global.Warn(msg, args...)
 }
 
+// Error 输出错误信息
 func Error(msg string, args ...interface{}) {
 	Global.Error(msg, args...)
-}
-
-func With(args ...interface{}) Logger {
-	return Global.With(args...)
-}
-
-func WithContext(ctx context.Context) Logger {
-	return Global.WithContext(ctx)
-}
-
-// LogError 记录错误信息的便捷函数
-func LogError(err error, msg string, args ...interface{}) {
-	if err != nil {
-		allArgs := append(args, "error", err.Error())
-		Global.Error(msg, allArgs...)
-	}
-}
-
-// LogDuration 记录函数执行时间
-func LogDuration(start time.Time, operation string, args ...interface{}) {
-	duration := time.Since(start)
-	allArgs := append(args, 
-		"operation", operation, 
-		"duration_ms", duration.Milliseconds(),
-	)
-	Global.Info("operation completed", allArgs...)
-}
-
-// TimedOperation 带计时的操作包装器
-func TimedOperation(operation string, fn func() error, args ...interface{}) error {
-	start := time.Now()
-	err := fn()
-	
-	duration := time.Since(start)
-	allArgs := append(args,
-		"operation", operation,
-		"duration_ms", duration.Milliseconds(),
-	)
-	
-	if err != nil {
-		allArgs = append(allArgs, "error", err.Error())
-		Global.Error("operation failed", allArgs...)
-	} else {
-		Global.Info("operation completed", allArgs...)
-	}
-	
-	return err
 }

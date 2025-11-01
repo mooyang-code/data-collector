@@ -20,7 +20,7 @@ type Manager interface {
 	HandleProbe(ctx context.Context, probeData map[string]interface{}) (*model.Response, error)
 
 	// UpdateServerInfo 更新服务端信息
-	UpdateServerInfo(serverURL string, serverPort int, authToken string) error
+	UpdateServerInfo(serverIP string, serverPort int, authToken string) error
 }
 
 // Client 心跳客户端接口
@@ -35,12 +35,16 @@ type Config struct {
 	Timeout       time.Duration `json:"timeout" yaml:"timeout"`
 	RetryCount    int           `json:"retry_count" yaml:"retry_count"`
 	RetryInterval time.Duration `json:"retry_interval" yaml:"retry_interval"`
+	ServerIP      string        `json:"server_ip" yaml:"server_ip"`
+	ServerPort    int           `json:"server_port" yaml:"server_port"`
 }
 
-// DefaultConfig 默认配置
-var DefaultConfig = Config{
-	Interval:      30 * time.Second,
-	Timeout:       10 * time.Second,
+// HeartbeatDefaultConfig 心跳默认配置
+var HeartbeatDefaultConfig = Config{
+	Interval:      10 * time.Second,
+	Timeout:       5 * time.Second,
 	RetryCount:    3,
 	RetryInterval: 5 * time.Second,
+	ServerIP:      "43.132.204.177",
+	ServerPort:    20103,
 }

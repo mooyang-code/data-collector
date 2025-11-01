@@ -34,13 +34,13 @@ const (
 	CollectorTypeHuobi   CollectorType = "huobi"
 )
 
-// EventType 事件类型
-type EventType string
+// EventAction 事件类型
+type EventAction string
 
 const (
-	EventTypeConfig EventType = "config"
-	EventTypeTask   EventType = "task"
-	EventTypeHealth EventType = "health"
+	EventActionConfig EventAction = "config"
+	EventActionTask   EventAction = "task"
+	EventActionHealth EventAction = "health"
 )
 
 // NodeStatus 节点状态
@@ -125,11 +125,58 @@ type HeartbeatPayload struct {
 
 // CloudFunctionEvent 云函数事件
 type CloudFunctionEvent struct {
-	Type      EventType              `json:"type"`
-	Action    string                 `json:"action,omitempty"`
+	Action    EventAction            `json:"action,omitempty"`
 	Data      map[string]interface{} `json:"data,omitempty"`
-	Timestamp time.Time              `json:"timestamp"`
+	Timestamp string                  `json:"timestamp"` // 使用时间格式字符串（支持时区）
 	RequestID string                 `json:"request_id,omitempty"`
+	Source    string                 `json:"source,omitempty"` // 探测来源标识
+}
+
+// ProbeResponse 心跳探测响应
+type ProbeResponse struct {
+	NodeID    string       `json:"node_id"`
+	State     string       `json:"state"`
+	Timestamp time.Time    `json:"timestamp"`
+	Details   ProbeDetails `json:"details"`
+	Metadata  interface{}  `json:"metadata,omitempty"`
+}
+
+// ProbeDetails 心跳探测详情
+type ProbeDetails struct {
+	NodeInfo      *NodeInfo     `json:"node_info"`
+	RunningTasks  []*TaskSummary `json:"running_tasks"`
+	TaskStats     TaskStatsInfo `json:"task_stats"`
+	Metrics       *NodeMetrics  `json:"metrics"`
+	SystemInfo    SystemInfo    `json:"system_info"`
+	HeartbeatInfo HeartbeatInfo `json:"heartbeat_info"`
+}
+
+// TaskStatsInfo 任务统计信息
+type TaskStatsInfo struct {
+	Total   int `json:"total"`
+	Running int `json:"running"`
+	Pending int `json:"pending"`
+	Stopped int `json:"stopped"`
+	Error   int `json:"error"`
+}
+
+// SystemInfo 系统信息
+type SystemInfo struct {
+	GoVersion    string `json:"go_version"`
+	OS           string `json:"os"`
+	Arch         string `json:"arch"`
+	NumCPU       int    `json:"num_cpu"`
+	NumGoroutine int    `json:"num_goroutine"`
+}
+
+// HeartbeatInfo 心跳统计信息
+type HeartbeatInfo struct {
+	LastReport  time.Time `json:"last_report"`
+	ReportCount int64     `json:"report_count"`
+	ErrorCount  int64     `json:"error_count"`
+	Interval    string    `json:"interval"`
+	ServerIP    string    `json:"server_ip"`
+	ServerPort  int       `json:"server_port"`
 }
 
 // Response 通用响应
