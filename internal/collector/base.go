@@ -6,8 +6,6 @@ import (
 	"log"
 	"sync"
 	"time"
-
-	"github.com/mooyang-code/data-collector/internal/core/scheduler"
 )
 
 // BaseCollector 基础采集器，使用cron调度器实现整点执行
@@ -16,8 +14,8 @@ type BaseCollector struct {
 	typ      string
 	dataType string
 
-	scheduler scheduler.Scheduler // 使用cron调度器
-	timers    map[string]*Timer   // 保留Timer信息用于状态展示
+	scheduler Scheduler         // 使用cron调度器
+	timers    map[string]*Timer // 保留Timer信息用于状态展示
 	mu        sync.RWMutex
 
 	isRunning bool
@@ -39,7 +37,7 @@ func NewBaseCollector(id, typ, dataType string) *BaseCollector {
 		id:        id,
 		typ:       typ,
 		dataType:  dataType,
-		scheduler: scheduler.NewCronScheduler(),
+		scheduler: NewCronScheduler(),
 		timers:    make(map[string]*Timer),
 		metrics: CollectorMetrics{
 			TimerMetrics: make(map[string]TimerMetrics),
@@ -103,7 +101,7 @@ func (c *BaseCollector) Stop(ctx context.Context) error {
 }
 
 // AddTimer 添加定时器（使用时间间隔，自动实现整点运行）
-func (c *BaseCollector) AddTimer(name string, interval time.Duration, handler TimerHandler) error {
+func (c *BaseCollector) AddTimer(ctx context.Context, name string, interval time.Duration, handler TimerHandler) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -114,9 +112,9 @@ func (c *BaseCollector) AddTimer(name string, interval time.Duration, handler Ti
 	// 包装handler以更新metrics
 	wrappedHandler := c.wrapHandler(name, handler)
 
-	// 添加到调度器
+	// 添加到调度器，传入 ctx 用于克隆链路追踪信息
 	taskName := fmt.Sprintf("%s.%s", c.id, name)
-	if err := c.scheduler.AddTask(taskName, interval, wrappedHandler); err != nil {
+	if err := c.scheduler.AddTask(ctx, taskName, interval, wrappedHandler); err != nil {
 		return fmt.Errorf("添加任务到调度器失败: %w", err)
 	}
 
@@ -270,7 +268,7 @@ func (c *BaseCollector) wrapHandler(name string, handler TimerHandler) func(cont
 }
 
 // AddCronTimer 添加Cron定时器（支持更灵活的调度）
-func (c *BaseCollector) AddCronTimer(name string, cronExpr string, handler TimerHandler) error {
+func (c *BaseCollector) AddCronTimer(ctx context.Context, name string, cronExpr string, handler TimerHandler) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -281,9 +279,9 @@ func (c *BaseCollector) AddCronTimer(name string, cronExpr string, handler Timer
 	// 包装handler
 	wrappedHandler := c.wrapHandler(name, handler)
 
-	// 添加到调度器
+	// 添加到调度器，传入 ctx 用于克隆链路追踪信息
 	taskName := fmt.Sprintf("%s.%s", c.id, name)
-	if err := c.scheduler.AddCronTask(taskName, cronExpr, wrappedHandler); err != nil {
+	if err := c.scheduler.AddCronTask(ctx, taskName, cronExpr, wrappedHandler); err != nil {
 		return fmt.Errorf("添加Cron任务到调度器失败: %w", err)
 	}
 

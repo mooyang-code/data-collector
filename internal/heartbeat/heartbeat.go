@@ -10,10 +10,9 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/avast/retry-go"
 	"github.com/mooyang-code/data-collector/pkg/config"
 	"github.com/mooyang-code/data-collector/pkg/model"
-
-	"github.com/avast/retry-go"
 	"github.com/tencentyun/scf-go-lib/functioncontext"
 	"trpc.group/trpc-go/trpc-go/log"
 )
@@ -171,7 +170,7 @@ func executeReport(ctx context.Context, payload *model.HeartbeatPayload, serverI
 	// 记录任务配置信息
 	tasks := config.GetAllTaskInstanceList()
 	for _, task := range tasks {
-		log.InfoContextf(ctx, "任务配置 task instance: %+v", task)
+		log.DebugContextf(ctx, "任务配置 task instance: %+v", task)
 	}
 
 	// 构建请求体
@@ -338,7 +337,6 @@ func buildProbeResponse(options ...BuildProbeResponseOption) (*model.ProbeRespon
 			HeartbeatInfo: heartbeatInfo,
 		},
 	}
-
 	return probeResponse, nil
 }
 

@@ -1,4 +1,4 @@
-package scheduler
+package collector
 
 import (
 	"context"
@@ -8,14 +8,15 @@ import (
 	"time"
 
 	"github.com/robfig/cron/v3"
+	"trpc.group/trpc-go/trpc-go"
 )
 
 // Scheduler 调度器接口
 type Scheduler interface {
-	// AddTask 添加定时任务（支持时间间隔）
-	AddTask(name string, interval time.Duration, handler func(context.Context) error) error
-	// AddCronTask 添加Cron任务（支持Cron表达式，实现整点运行）
-	AddCronTask(name string, cronExpr string, handler func(context.Context) error) error
+	// AddTask 添加定时任务（支持时间间隔），ctx 用于克隆链路追踪信息
+	AddTask(ctx context.Context, name string, interval time.Duration, handler func(context.Context) error) error
+	// AddCronTask 添加Cron任务（支持Cron表达式，实现整点运行），ctx 用于克隆链路追踪信息
+	AddCronTask(ctx context.Context, name string, cronExpr string, handler func(context.Context) error) error
 	// RemoveTask 移除任务
 	RemoveTask(name string) error
 	// Start 启动调度器
@@ -49,7 +50,8 @@ type Task struct {
 	Interval time.Duration // 用于interval类型
 	CronExpr string        // 用于cron类型
 	Handler  func(context.Context) error
-	EntryID  cron.EntryID // cron任务ID
+	EntryID  cron.EntryID    // cron任务ID
+	BaseCtx  context.Context // 克隆的上下文，保留链路追踪信息
 
 	// 运行时状态
 	lastRun    time.Time
@@ -69,14 +71,6 @@ type CronScheduler struct {
 	logger  *log.Logger
 }
 
-// TimeScheduler 兼容性类型别名
-type TimeScheduler = CronScheduler
-
-// NewTimeScheduler 创建时间调度器
-func NewTimeScheduler() *CronScheduler {
-	return NewCronScheduler()
-}
-
 // NewCronScheduler 创建基于Cron的调度器
 func NewCronScheduler() *CronScheduler {
 	// 创建支持秒级精度的cron调度器
@@ -89,20 +83,15 @@ func NewCronScheduler() *CronScheduler {
 	}
 }
 
-// NewScheduler 创建默认调度器（向后兼容）
-func NewScheduler() Scheduler {
-	return NewCronScheduler()
-}
-
 // AddTask 添加定时任务（支持时间间隔）
-func (s *CronScheduler) AddTask(name string, interval time.Duration, handler func(context.Context) error) error {
+func (s *CronScheduler) AddTask(ctx context.Context, name string, interval time.Duration, handler func(context.Context) error) error {
 	// 将时间间隔转换为cron表达式
 	cronExpr := s.intervalToCron(interval)
-	return s.AddCronTask(name, cronExpr, handler)
+	return s.AddCronTask(ctx, name, cronExpr, handler)
 }
 
 // AddCronTask 添加Cron任务（支持Cron表达式，实现整点运行）
-func (s *CronScheduler) AddCronTask(name string, cronExpr string, handler func(context.Context) error) error {
+func (s *CronScheduler) AddCronTask(ctx context.Context, name string, cronExpr string, handler func(context.Context) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -110,11 +99,15 @@ func (s *CronScheduler) AddCronTask(name string, cronExpr string, handler func(c
 		return fmt.Errorf("任务 %s 已存在", name)
 	}
 
+	// 使用 trpc.CloneContext 克隆上下文，保留链路追踪信息，分离超时控制
+	baseCtx := trpc.CloneContext(ctx)
+
 	task := &Task{
 		Name:     name,
 		Type:     "cron",
 		CronExpr: cronExpr,
 		Handler:  handler,
+		BaseCtx:  baseCtx,
 	}
 
 	// 创建任务包装函数，传入task引用
@@ -251,8 +244,11 @@ func (s *CronScheduler) intervalToCron(interval time.Duration) string {
 // wrapHandler 包装任务处理函数
 func (s *CronScheduler) wrapHandler(task *Task) func() {
 	return func() {
-		// 使用背景context执行任务
-		ctx := context.Background()
+		// 使用克隆的上下文执行任务，保留链路追踪信息
+		ctx := task.BaseCtx
+		if ctx == nil {
+			ctx = context.Background()
+		}
 		s.executeTask(ctx, task)
 	}
 }

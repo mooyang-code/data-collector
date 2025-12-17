@@ -1,5 +1,7 @@
 package config
 
+import "encoding/json"
+
 const TBTaskInstance = "t_collector_task_instances"
 
 // CollectorTaskInstanceCache 采集任务实例缓存结构
@@ -12,10 +14,48 @@ type CollectorTaskInstanceCache struct {
 	RuleID string `json:"RuleID"`
 	// NodeID 执行节点ID
 	NodeID string `json:"NodeID"`
-	// TaskParams 任务执行参数
+	// TaskParams 任务执行参数（原始JSON字符串）
 	TaskParams string `json:"TaskParams"`
+	// Invalid 任务删除标记
+	Invalid int `json:"Invalid"`
 	// AccessUrl 访问该表的接口url
 	AccessUrl string
+
+	// === 以下为 TaskParams 解析后的结构化字段 ===
+	// DataType 数据类型（如 kline, ticker, depth 等）
+	DataType string `json:"-"`
+	// DataSource 数据源（如 binance, okx 等）
+	DataSource string `json:"-"`
+	// Symbol 交易对（如 BTC-USDT）
+	Symbol string `json:"-"`
+	// Intervals K线周期列表（如 ["1m", "3m", "5m"]）
+	Intervals []string `json:"-"`
+}
+
+// taskParamsJSON TaskParams 的 JSON 解析结构
+type taskParamsJSON struct {
+	DataType   string   `json:"data_type"`
+	DataSource string   `json:"data_source"`
+	Symbol     string   `json:"symbol"`
+	Intervals  []string `json:"intervals"`
+}
+
+// ParseTaskParams 解析 TaskParams JSON 字符串并填充结构化字段
+func (c *CollectorTaskInstanceCache) ParseTaskParams() error {
+	if c.TaskParams == "" {
+		return nil
+	}
+
+	var params taskParamsJSON
+	if err := json.Unmarshal([]byte(c.TaskParams), &params); err != nil {
+		return err
+	}
+
+	c.DataType = params.DataType
+	c.DataSource = params.DataSource
+	c.Symbol = params.Symbol
+	c.Intervals = params.Intervals
+	return nil
 }
 
 // SchemaID 实现接口APICacher
@@ -35,7 +75,7 @@ func (CollectorTaskInstanceCache) SearchFields() map[string]string {
 
 // FilterKey 实现接口APICacher
 func (CollectorTaskInstanceCache) FilterKey() string {
-	return "" // 不需要过滤条件，获取所有数据
+	return "Invalid=0"
 }
 
 // GetAllTaskInstanceList 获取所有采集任务实例缓存
@@ -43,6 +83,10 @@ func GetAllTaskInstanceList() []*CollectorTaskInstanceCache {
 	instances, ok := GetAll(TBTaskInstance).([]*CollectorTaskInstanceCache)
 	if !ok {
 		return nil
+	}
+	// 解析每个实例的 TaskParams
+	for _, instance := range instances {
+		_ = instance.ParseTaskParams()
 	}
 	return instances
 }

@@ -98,14 +98,19 @@ func (kb *KlineBatch) AddKline(kline *Kline) {
 }
 
 const (
-	Interval1m  = "1m"  // Interval1m 1分钟时间间隔
-	Interval5m  = "5m"  // Interval5m 5分钟时间间隔
-	Interval15m = "15m" // Interval15m 15分钟时间间隔
-	Interval30m = "30m" // Interval30m 30分钟时间间隔
-	Interval1h  = "1h"  // Interval1h 1小时时间间隔
-	Interval4h  = "4h"  // Interval4h 4小时时间间隔
-	Interval1d  = "1d"  // Interval1d 1天时间间隔
-	Interval1w  = "1w"  // Interval1w 1周时间间隔
+	Interval1m  = "1m"  // 1分钟
+	Interval3m  = "3m"  // 3分钟
+	Interval5m  = "5m"  // 5分钟
+	Interval15m = "15m" // 15分钟
+	Interval30m = "30m" // 30分钟
+	Interval1h  = "1h"  // 1小时
+	Interval2h  = "2h"  // 2小时
+	Interval4h  = "4h"  // 4小时
+	Interval6h  = "6h"  // 6小时
+	Interval12h = "12h" // 12小时
+	Interval1d  = "1d"  // 1天
+	Interval1w  = "1w"  // 1周
+	Interval1M  = "1M"  // 1月
 )
 
 // IntervalDuration 获取间隔对应的时间长度
@@ -113,6 +118,8 @@ func IntervalDuration(interval string) (time.Duration, error) {
 	switch interval {
 	case Interval1m:
 		return 1 * time.Minute, nil
+	case Interval3m:
+		return 3 * time.Minute, nil
 	case Interval5m:
 		return 5 * time.Minute, nil
 	case Interval15m:
@@ -121,12 +128,20 @@ func IntervalDuration(interval string) (time.Duration, error) {
 		return 30 * time.Minute, nil
 	case Interval1h:
 		return 1 * time.Hour, nil
+	case Interval2h:
+		return 2 * time.Hour, nil
 	case Interval4h:
 		return 4 * time.Hour, nil
+	case Interval6h:
+		return 6 * time.Hour, nil
+	case Interval12h:
+		return 12 * time.Hour, nil
 	case Interval1d:
 		return 24 * time.Hour, nil
 	case Interval1w:
 		return 7 * 24 * time.Hour, nil
+	case Interval1M:
+		return 30 * 24 * time.Hour, nil // 近似按30天计算
 	default:
 		return 0, fmt.Errorf("未知的时间间隔: %s", interval)
 	}

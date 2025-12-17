@@ -49,7 +49,7 @@ func (b *Bootstrap) Initialize(ctx context.Context) error {
 	// 3. 保存服务实例
 	b.services = services
 
-	// 注册TRPC服务
+	// 注册TRPC服务（使用trpc的定时器）
 	if err := RegisterTRPCServices(); err != nil {
 		log.Errorf("注册TRPC服务失败: %v", err)
 		return err

@@ -3,12 +3,11 @@ package main
 import (
 	"context"
 
-	_ "trpc.group/trpc-go/trpc-log-cls"
-
 	"github.com/mooyang-code/data-collector/internal/bootstrap"
-	"github.com/mooyang-code/data-collector/pkg/config"
 	"github.com/mooyang-code/data-collector/internal/cloudfunction"
+	"github.com/mooyang-code/data-collector/pkg/config"
 	"trpc.group/trpc-go/trpc-go/log"
+	_ "trpc.group/trpc-go/trpc-log-cls"
 )
 
 func main() {
@@ -23,7 +22,7 @@ func main() {
 		panic("failed to initialize bootstrap: " + err.Error())
 	}
 
-	// 注册并启动云函数
+	// 注册并启动云函数(云函数在这里，只是起到心跳保持的作用)，
 	cloudfunction.RegisterCloudFunction()
 
 	// 保持运行

@@ -1,7 +1,7 @@
 # 主配置文件
 system:
   name: "multi-source-data-collector"
-  version: "v1.0.30"
+  version: "v1.0.34"
   environment: "Production"
   timezone: "UTC"
 
@@ -14,13 +14,6 @@ event_bus:
     redis:
       addr: "localhost:6379"
       db: 0
-
-# 心跳配置
-heartbeat:
-  interval: "10s"
-  timeout: "5s"
-  retry_count: 3
-  retry_interval: "2s"
 
 # 数据源配置
 sources:

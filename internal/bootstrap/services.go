@@ -4,52 +4,41 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mooyang-code/data-collector/internal/collector"
+	_ "github.com/mooyang-code/data-collector/internal/collector/binance" // 注册 binance 采集器
+	"github.com/mooyang-code/data-collector/internal/taskmgr"
 	"github.com/mooyang-code/data-collector/pkg/config"
 	"trpc.group/trpc-go/trpc-go/log"
-
-	_ "github.com/mooyang-code/data-collector/internal/collector/exchanges" // 注册采集器
 )
 
 // Services 应用服务集合
-type Services struct {
-	// 采集器管理器（核心服务）
-	CollectorManager collector.Manager
-}
+type Services struct{}
 
 // StartBackgroundServices 启动所有后台服务
-// 简化版：只启动采集器相关服务
 func StartBackgroundServices(ctx context.Context) (*Services, error) {
 	log.Info("正在启动后台服务...")
 
-	// 1. 初始化缓存系统
+	// 1. 初始化缓存系统（缓存远端任务配置API的结果）
 	if err := initConfigCaches(); err != nil {
 		log.Errorf("初始化配置缓存系统失败: %v", err)
 		return nil, err
 	}
 
-	// 2. 创建采集器管理器
-	collectorManager, err := createCollectorManager()
-	if err != nil {
-		log.Errorf("创建采集器管理器失败: %v", err)
+	// 2. 初始化任务管理器
+	if err := initTaskManager(); err != nil {
+		log.Errorf("初始化任务管理器失败: %v", err)
 		return nil, err
 	}
 
 	log.Info("后台服务启动完成")
-	return &Services{
-		CollectorManager: collectorManager,
-	}, nil
+	return &Services{}, nil
 }
 
-// createCollectorManager 创建采集器管理器
-func createCollectorManager() (collector.Manager, error) {
-	log.Info("正在创建采集器管理器...")
-
-	// 创建采集器管理器
-	collectorManager := collector.NewManager(nil)
-
-	log.Info("采集器管理器创建成功")
-	return collectorManager, nil
+// initTaskManager 初始化任务管理器
+func initTaskManager() error {
+	log.Info("正在初始化任务管理器...")
+	taskmgr.InitManager()
+	log.Info("任务管理器初始化完成")
+	return nil
 }
 
 // initConfigCaches 初始化配置缓存系统
@@ -58,7 +47,7 @@ func initConfigCaches() error {
 
 	// 创建任务实例缓存配置
 	taskInstanceCache := config.CollectorTaskInstanceCache{
-		AccessUrl: fmt.Sprintf("http://%s/gateway/collector/GetTaskInstanceListInner", config.MooxServerServiceName),
+		AccessUrl: fmt.Sprintf("http://%s/gateway/collectmgr/GetTaskInstanceListInner", config.MooxServerServiceName),
 	}
 
 	// 初始化远程配置缓存系统
