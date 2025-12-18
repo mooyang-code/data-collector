@@ -105,6 +105,7 @@ func (m *TaskManager) Sync(ctx context.Context) error {
 func (m *TaskManager) startTaskLocked(ctx context.Context, task *config.CollectorTaskInstanceCache) {
 	// 构建 Collector 配置
 	collectorConfig := map[string]interface{}{
+		"inst_type": task.InstType,
 		"symbol":    task.Symbol,
 		"intervals": task.Intervals,
 	}
@@ -139,8 +140,8 @@ func (m *TaskManager) startTaskLocked(ctx context.Context, task *config.Collecto
 		ParamsHash:   hashString(task.TaskParams),
 	}
 
-	log.InfoContextf(ctx, "任务 %s 启动成功 [%s/%s, %s, %v]",
-		task.TaskID, task.DataSource, task.DataType, task.Symbol, task.Intervals)
+	log.InfoContextf(ctx, "任务 %s 启动成功 [%s/%s, inst_type=%s, symbol=%s, intervals=%v]",
+		task.TaskID, task.DataSource, task.DataType, task.InstType, task.Symbol, task.Intervals)
 }
 
 // stopTaskLocked 停止任务（调用前需持有锁）

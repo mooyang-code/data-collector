@@ -26,6 +26,8 @@ type CollectorTaskInstanceCache struct {
 	DataType string `json:"-"`
 	// DataSource 数据源（如 binance, okx 等）
 	DataSource string `json:"-"`
+	// InstType 产品类型: SPOT(现货), SWAP(永续合约), FUTURES(交割合约)
+	InstType string `json:"-"`
 	// Symbol 交易对（如 BTC-USDT）
 	Symbol string `json:"-"`
 	// Intervals K线周期列表（如 ["1m", "3m", "5m"]）
@@ -36,6 +38,7 @@ type CollectorTaskInstanceCache struct {
 type taskParamsJSON struct {
 	DataType   string   `json:"data_type"`
 	DataSource string   `json:"data_source"`
+	InstType   string   `json:"inst_type"`
 	Symbol     string   `json:"symbol"`
 	Intervals  []string `json:"intervals"`
 }
@@ -53,6 +56,7 @@ func (c *CollectorTaskInstanceCache) ParseTaskParams() error {
 
 	c.DataType = params.DataType
 	c.DataSource = params.DataSource
+	c.InstType = params.InstType
 	c.Symbol = params.Symbol
 	c.Intervals = params.Intervals
 	return nil

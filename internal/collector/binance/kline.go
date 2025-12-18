@@ -3,20 +3,31 @@ package binance
 import (
 	"context"
 	"fmt"
-	"math/rand"
-	"time"
 
 	"github.com/mooyang-code/data-collector/internal/collector"
-	"github.com/mooyang-code/data-collector/internal/model/common"
+	"github.com/mooyang-code/data-collector/internal/exchange"
+	binanceapi "github.com/mooyang-code/data-collector/internal/exchange/binance"
 	"github.com/mooyang-code/data-collector/internal/model/market"
 	"trpc.group/trpc-go/trpc-go/log"
+)
+
+// 产品类型常量
+const (
+	InstTypeSPOT = "SPOT" // 现货
+	InstTypeSWAP = "SWAP" // 永续合约
 )
 
 // KlineCollector K线数据采集器
 type KlineCollector struct {
 	*collector.BaseCollector
-	symbol    string
-	intervals []string
+	instType  string   // 产品类型
+	symbol    string   // 交易对
+	intervals []string // K线周期列表
+
+	// API 客户端
+	binanceClient *binanceapi.Client
+	spotAPI       *binanceapi.SpotAPI
+	swapAPI       *binanceapi.SwapAPI
 }
 
 // init 自注册到采集器注册中心
@@ -24,8 +35,7 @@ func init() {
 	err := collector.NewBuilder().
 		Source("binance", "币安").
 		DataType("kline", "K线").
-		MarketType("spot", "现货").
-		Description("币安现货K线数据采集器").
+		Description("币安K线数据采集器").
 		Creator(NewKlineCollector).
 		Register()
 
@@ -36,6 +46,17 @@ func init() {
 
 // NewKlineCollector 创建K线采集器
 func NewKlineCollector(config map[string]interface{}) (collector.Collector, error) {
+	// 解析 inst_type（必填）
+	instType, ok := config["inst_type"].(string)
+	if !ok || instType == "" {
+		return nil, fmt.Errorf("缺少必填参数 inst_type")
+	}
+
+	// 验证 inst_type
+	if instType != InstTypeSPOT && instType != InstTypeSWAP {
+		return nil, fmt.Errorf("无效的产品类型 inst_type: %s，支持: SPOT, SWAP", instType)
+	}
+
 	// 解析 symbol（必填）
 	symbol, ok := config["symbol"].(string)
 	if !ok || symbol == "" {
@@ -49,12 +70,19 @@ func NewKlineCollector(config map[string]interface{}) (collector.Collector, erro
 	}
 
 	// 生成唯一的采集器ID
-	collectorID := fmt.Sprintf("binance_kline_%s", symbol)
+	collectorID := fmt.Sprintf("binance_kline_%s_%s", instType, symbol)
+
+	// 创建币安客户端
+	binanceClient := binanceapi.NewClient()
 
 	c := &KlineCollector{
 		BaseCollector: collector.NewBaseCollector(collectorID, "market", "kline"),
+		instType:      instType,
 		symbol:        symbol,
 		intervals:     intervals,
+		binanceClient: binanceClient,
+		spotAPI:       binanceapi.NewSpotAPI(binanceClient),
+		swapAPI:       binanceapi.NewSwapAPI(binanceClient),
 	}
 
 	return c, nil
@@ -62,7 +90,7 @@ func NewKlineCollector(config map[string]interface{}) (collector.Collector, erro
 
 // Initialize 初始化
 func (c *KlineCollector) Initialize(ctx context.Context) error {
-	log.InfoContextf(ctx, "K线采集器初始化: symbol=%s, intervals=%v", c.symbol, c.intervals)
+	log.InfoContextf(ctx, "K线采集器初始化: inst_type=%s, symbol=%s, intervals=%v", c.instType, c.symbol, c.intervals)
 
 	// 调用基类初始化
 	if err := c.BaseCollector.Initialize(ctx); err != nil {
@@ -94,62 +122,65 @@ func (c *KlineCollector) Initialize(ctx context.Context) error {
 // createCollectHandler 创建采集处理函数
 func (c *KlineCollector) createCollectHandler(interval string) collector.TimerHandler {
 	return func(ctx context.Context) error {
-		log.InfoContextf(ctx, "K线采集开始: symbol=%s, interval=%s", c.symbol, interval)
+		log.InfoContextf(ctx, "K线采集开始: inst_type=%s, symbol=%s, interval=%s", c.instType, c.symbol, interval)
 
-		// 生成假数据
-		klines := c.generateMockKlines(interval, 10)
+		// 从币安 API 获取 K 线数据
+		klines, err := c.fetchKlines(ctx, interval)
+		if err != nil {
+			log.ErrorContextf(ctx, "K线采集失败: inst_type=%s, symbol=%s, interval=%s, error=%v",
+				c.instType, c.symbol, interval, err)
+			return err
+		}
 
-		log.InfoContextf(ctx, "K线采集完成: symbol=%s, interval=%s, count=%d",
-			c.symbol, interval, len(klines))
+		log.InfoContextf(ctx, "K线采集完成: inst_type=%s, symbol=%s, interval=%s, count=%d",
+			c.instType, c.symbol, interval, len(klines))
 
 		// TODO: 发布事件或存储数据
 		return nil
 	}
 }
 
-// generateMockKlines 生成假的K线数据
-func (c *KlineCollector) generateMockKlines(interval string, count int) []*market.Kline {
-	klines := make([]*market.Kline, 0, count)
-
-	// 获取间隔时长
-	duration, _ := market.IntervalDuration(interval)
-	if duration == 0 {
-		duration = time.Minute
+// fetchKlines 从币安 API 获取 K 线数据
+func (c *KlineCollector) fetchKlines(ctx context.Context, interval string) ([]*market.Kline, error) {
+	req := &exchange.KlineRequest{
+		Symbol:   c.symbol,
+		Interval: interval,
+		Limit:    1, // 只获取最新的一根K线
 	}
 
-	// 基础价格（模拟 BTC 价格）
-	basePrice := 50000.0 + rand.Float64()*10000
+	var exchangeKlines []*exchange.Kline
+	var err error
 
-	now := time.Now().Truncate(duration)
+	// 根据产品类型选择 API
+	switch c.instType {
+	case InstTypeSPOT:
+		exchangeKlines, err = c.spotAPI.GetKline(ctx, req)
+	case InstTypeSWAP:
+		exchangeKlines, err = c.swapAPI.GetKline(ctx, req)
+	default:
+		return nil, fmt.Errorf("不支持的产品类型: %s", c.instType)
+	}
 
-	for i := 0; i < count; i++ {
-		openTime := now.Add(-duration * time.Duration(count-i))
-		closeTime := openTime.Add(duration)
+	if err != nil {
+		return nil, err
+	}
 
-		// 生成随机价格波动
-		priceChange := (rand.Float64() - 0.5) * 200
-		open := basePrice + priceChange
-		close := open + (rand.Float64()-0.5)*100
-		high := max(open, close) + rand.Float64()*50
-		low := min(open, close) - rand.Float64()*50
-		volume := 100 + rand.Float64()*1000
-
+	// 转换为 market.Kline 格式
+	klines := make([]*market.Kline, 0, len(exchangeKlines))
+	for _, ek := range exchangeKlines {
 		kline := market.NewKline("binance", c.symbol, interval)
-		kline.OpenTime = openTime
-		kline.CloseTime = closeTime
-		kline.Open = common.NewDecimalFromFloat(open)
-		kline.High = common.NewDecimalFromFloat(high)
-		kline.Low = common.NewDecimalFromFloat(low)
-		kline.Close = common.NewDecimalFromFloat(close)
-		kline.Volume = common.NewDecimalFromFloat(volume)
-		kline.QuoteVolume = common.NewDecimalFromFloat(volume * open)
-		kline.TradeCount = int64(rand.Intn(1000) + 100)
+		kline.OpenTime = ek.OpenTime
+		kline.CloseTime = ek.CloseTime
+		kline.Open = ek.Open
+		kline.High = ek.High
+		kline.Low = ek.Low
+		kline.Close = ek.Close
+		kline.Volume = ek.Volume
+		kline.QuoteVolume = ek.QuoteVolume
+		kline.TradeCount = ek.TradeCount
 
 		klines = append(klines, kline)
-
-		// 更新基础价格
-		basePrice = close
 	}
 
-	return klines
+	return klines, nil
 }

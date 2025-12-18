@@ -50,14 +50,20 @@ func initConfigCaches() error {
 		AccessUrl: fmt.Sprintf("http://%s/gateway/collectmgr/GetTaskInstanceListInner", config.MooxServerServiceName),
 	}
 
+	// 创建 DNS 记录缓存配置
+	dnsRecordCache := config.DNSRecord{
+		AccessUrl: fmt.Sprintf("http://%s/gateway/dnsproxy/GetDNSRecordList", config.MooxServerServiceName),
+	}
+
 	// 初始化远程配置缓存系统
 	if err := config.InitCache(
 		map[string]string{
 			config.MooxServerServiceName: "", // 初始化的时候为空，没关系；后面服务端心跳探测会更新该映射
 		},
 		fmt.Sprintf("compass://%s", config.MooxServerServiceName),
-		taskInstanceCache); err != nil {
-		log.Errorf("初始化任务实例缓存失败: %v", err)
+		taskInstanceCache,
+		dnsRecordCache); err != nil {
+		log.Errorf("初始化配置缓存失败: %v", err)
 		return err
 	}
 	log.Info("缓存系统初始化完成")
