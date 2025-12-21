@@ -43,7 +43,7 @@ func (api *SpotAPI) GetKline(ctx context.Context, req *exchange.KlineRequest) ([
 
 	// 发送请求
 	var rawKlines []CandleStick
-	if err := api.client.SpotClient().Get(ctx, SpotKlineEndpoint, params, &rawKlines); err != nil {
+	if err := api.client.Get(ctx, SpotDomain, SpotKlineEndpoint, params, &rawKlines); err != nil {
 		return nil, fmt.Errorf("获取现货K线失败: %w", err)
 	}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	_ "github.com/mooyang-code/data-collector/internal/collector/binance" // 注册 binance 采集器
+	"github.com/mooyang-code/data-collector/internal/dnsproxy"
 	"github.com/mooyang-code/data-collector/internal/taskmgr"
 	"github.com/mooyang-code/data-collector/pkg/config"
 	"trpc.group/trpc-go/trpc-go/log"
@@ -29,6 +30,12 @@ func StartBackgroundServices(ctx context.Context) (*Services, error) {
 		return nil, err
 	}
 
+	// 3. 初始化 DNS 代理
+	if err := initDNSProxy(); err != nil {
+		log.Errorf("初始化 DNS 代理失败: %v", err)
+		return nil, err
+	}
+
 	log.Info("后台服务启动完成")
 	return &Services{}, nil
 }
@@ -50,22 +57,24 @@ func initConfigCaches() error {
 		AccessUrl: fmt.Sprintf("http://%s/gateway/collectmgr/GetTaskInstanceListInner", config.MooxServerServiceName),
 	}
 
-	// 创建 DNS 记录缓存配置
-	dnsRecordCache := config.DNSRecord{
-		AccessUrl: fmt.Sprintf("http://%s/gateway/dnsproxy/GetDNSRecordList", config.MooxServerServiceName),
-	}
-
 	// 初始化远程配置缓存系统
 	if err := config.InitCache(
 		map[string]string{
 			config.MooxServerServiceName: "", // 初始化的时候为空，没关系；后面服务端心跳探测会更新该映射
 		},
 		fmt.Sprintf("compass://%s", config.MooxServerServiceName),
-		taskInstanceCache,
-		dnsRecordCache); err != nil {
+		taskInstanceCache); err != nil {
 		log.Errorf("初始化配置缓存失败: %v", err)
 		return err
 	}
 	log.Info("缓存系统初始化完成")
+	return nil
+}
+
+// initDNSProxy 初始化 DNS 代理
+func initDNSProxy() error {
+	log.Info("正在初始化 DNS 代理...")
+	dnsproxy.Init()
+	log.Info("DNS 代理初始化完成")
 	return nil
 }

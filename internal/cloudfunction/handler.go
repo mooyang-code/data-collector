@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/mooyang-code/data-collector/internal/heartbeat"
+	"github.com/mooyang-code/data-collector/pkg/config"
 	"github.com/mooyang-code/data-collector/pkg/model"
 	"github.com/tencentyun/scf-go-lib/cloudfunction"
 	"github.com/tencentyun/scf-go-lib/functioncontext"
@@ -106,19 +107,24 @@ func (h *CloudFunctionHandler) handleTask(ctx context.Context, event model.Cloud
 
 // handleHealth 处理健康检查事件（包括心跳探测功能）
 func (h *CloudFunctionHandler) handleHealth(ctx context.Context, event model.CloudFunctionEvent) (*model.Response, error) {
-	fmt.Printf("执行健康检查, source: %s", event.Source)
+	log.InfoContextf(ctx, "[handleHealth] 执行健康检查, source=%s, ServerIP=%s, ServerPort=%d",
+		event.Source, event.ServerIP, event.ServerPort)
 
 	// 处理心跳探测请求（服务端主动发送的探测）
 	if event.Source != "heartbeat_probe" {
 		// 不是moox后台来的心跳探测请求，直接进行普通健康检查
+		log.InfoContextf(ctx, "[handleHealth] 非探测请求，直接返回健康检查响应")
 		return h.buildHealthResponse(ctx, event)
 	}
 
 	// 调用函数式心跳模块处理探测请求
+	log.InfoContextf(ctx, "[handleHealth] 检测到探测请求，调用 ProcessProbe")
 	_, err := heartbeat.ProcessProbe(ctx, event)
 	if err != nil {
-		log.Warnf("处理心跳探测请求失败, error: %v", err)
+		log.ErrorContextf(ctx, "[handleHealth] 处理心跳探测请求失败: %v", err)
 		// 探测处理失败不影响健康检查响应
+	} else {
+		log.InfoContextf(ctx, "[handleHealth] ProcessProbe 执行成功")
 	}
 
 	// 构建健康检查响应
@@ -130,9 +136,18 @@ func (h *CloudFunctionHandler) buildHealthResponse(ctx context.Context, event mo
 	// 从云函数上下文获取信息
 	funcCtx, _ := functioncontext.FromContext(ctx)
 
+	// 获取节点ID：优先使用全局配置，降级使用函数名
+	nodeID, _ := config.GetNodeInfo()
+	if nodeID == "" && funcCtx.FunctionName != "" {
+		nodeID = funcCtx.FunctionName
+	}
+	if nodeID == "" {
+		nodeID = "cloud-function" // 最后降级
+	}
+
 	// 构建节点信息
 	nodeInfo := &model.NodeInfo{
-		NodeID:       "cloud-function",
+		NodeID:       nodeID,
 		NodeType:     "scf",
 		Region:       funcCtx.TencentcloudRegion,
 		Namespace:    funcCtx.Namespace,
@@ -149,10 +164,10 @@ func (h *CloudFunctionHandler) buildHealthResponse(ctx context.Context, event mo
 		},
 	}
 
-	// 如果是心跳探测请求，使用探测源中的节点ID
+	// 如果是心跳探测请求，使用探测源中的节点ID（优先级最高）
 	if event.Source == "heartbeat_probe" && event.Data != nil {
-		if nodeID, ok := event.Data["node_id"].(string); ok {
-			nodeInfo.NodeID = nodeID
+		if probeNodeID, ok := event.Data["node_id"].(string); ok && probeNodeID != "" {
+			nodeInfo.NodeID = probeNodeID
 		}
 	}
 

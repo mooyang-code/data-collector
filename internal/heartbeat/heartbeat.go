@@ -30,12 +30,12 @@ func ScheduledHeartbeat(ctx context.Context, _ string) error {
 	nodeID, version := config.GetNodeInfo()
 	log.WithContextFields(ctx, "func", "ScheduledHeartbeat", "version", version, "nodeID", nodeID)
 
-	log.InfoContextf(ctx, "ScheduledHeartbeat Enter")
+	log.DebugContextf(ctx, "ScheduledHeartbeat Enter")
 	if err := ReportHeartbeat(ctx); err != nil {
 		log.ErrorContextf(ctx, "scheduled heartbeat failed: %v", err)
 		return err
 	}
-	log.InfoContextf(ctx, "ScheduledHeartbeat Success")
+	log.DebugContextf(ctx, "ScheduledHeartbeat Success")
 	return nil
 }
 
@@ -43,14 +43,15 @@ func ScheduledHeartbeat(ctx context.Context, _ string) error {
 func ReportHeartbeat(ctx context.Context) error {
 	serverIP, serverPort := config.GetServerInfo()
 	nodeID, localVersion := config.GetNodeInfo()
-	log.InfoContextf(ctx, "ReportHeartbeat serverIP:%s, nodeID:%s", serverIP, nodeID)
+	log.InfoContextf(ctx, "ReportHeartbeat 开始: serverIP=%s:%d, nodeID=%s, version=%s", serverIP, serverPort, nodeID, localVersion)
+
 	// 检查NodeID是否配置
 	if nodeID == "" {
-		log.DebugContextf(ctx, "no node ID configured, skipping heartbeat report")
+		log.WarnContextf(ctx, "NodeID 为空，跳过心跳上报。请确保服务端探测请求已触发 ProcessProbe")
 		return nil
 	}
 	if serverIP == "" {
-		log.DebugContextf(ctx, "no server IP configured, skipping heartbeat report")
+		log.WarnContextf(ctx, "服务端 IP 未配置，跳过心跳上报")
 		return nil
 	}
 
@@ -77,21 +78,35 @@ func ReportHeartbeat(ctx context.Context) error {
 
 // ProcessProbe 处理心跳探测请求【服务端来的探测请求】
 func ProcessProbe(ctx context.Context, event model.CloudFunctionEvent) (*model.Response, error) {
+	log.InfoContextf(ctx, "[ProcessProbe] 开始处理探测请求")
+
 	// 从上下文获取云函数信息，更新NodeID
 	funcCtx, ok := functioncontext.FromContext(ctx)
 	if ok && funcCtx.FunctionName != "" {
 		currentNodeID, currentVersion := config.GetNodeInfo()
-		if funcCtx.FunctionName != currentNodeID {
-			config.UpdateNodeInfo(funcCtx.FunctionName, currentVersion)
-		}
+		log.InfoContextf(ctx, "[ProcessProbe] 当前 NodeID=%s, 云函数名=%s", currentNodeID, funcCtx.FunctionName)
+
+		// 无条件更新 NodeID 为云函数名称
+		config.UpdateNodeInfo(funcCtx.FunctionName, currentVersion)
+		log.InfoContextf(ctx, "[ProcessProbe] NodeID 已更新为 %s", funcCtx.FunctionName)
+	} else {
+		log.WarnContextf(ctx, "[ProcessProbe] 无法从上下文获取云函数信息, ok=%v", ok)
 	}
 
 	// 更新服务端连接信息的配置（用于本节点 主动上报心跳和拉取配置）
+	log.InfoContextf(ctx, "[ProcessProbe] event.ServerIP=%s, event.ServerPort=%d", event.ServerIP, event.ServerPort)
 	if event.ServerIP != "" && event.ServerPort > 0 {
+		log.InfoContextf(ctx, "[ProcessProbe] 更新服务端地址 %s:%d", event.ServerIP, event.ServerPort)
 		config.UpdateServerInfo(event.ServerIP, event.ServerPort)
 		config.UpdateCompassMap(map[string]string{
 			config.MooxServerServiceName: fmt.Sprintf("%s:%d", event.ServerIP, event.ServerPort),
 		})
+
+		// 验证更新是否成功
+		verifyIP, verifyPort := config.GetServerInfo()
+		log.InfoContextf(ctx, "[ProcessProbe] 验证更新后的服务端地址: %s:%d", verifyIP, verifyPort)
+	} else {
+		log.WarnContextf(ctx, "[ProcessProbe] 服务端地址信息缺失 ServerIP=%s, ServerPort=%d", event.ServerIP, event.ServerPort)
 	}
 
 	// 构建响应数据
@@ -166,12 +181,6 @@ func sendToServer(ctx context.Context, payload *model.HeartbeatPayload, serverIP
 // executeReport 准备并发送心跳请求
 func executeReport(ctx context.Context, payload *model.HeartbeatPayload, serverIP string, serverPort int) (string, error) {
 	url := fmt.Sprintf("http://%s:%d/gateway/cloudnode/ReportHeartbeatInner", serverIP, serverPort)
-
-	// 记录任务配置信息
-	tasks := config.GetAllTaskInstanceList()
-	for _, task := range tasks {
-		log.DebugContextf(ctx, "任务配置 task instance: %+v", task)
-	}
 
 	// 构建请求体
 	apiPayload := map[string]interface{}{

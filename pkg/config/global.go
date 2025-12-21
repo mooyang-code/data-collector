@@ -33,16 +33,7 @@ type NodeInfoConfig struct {
 }
 
 // GlobalConfig 全局配置实例
-var GlobalConfig = Config{
-	Server: ServerConfig{
-		IP:   "127.0.0.1",
-		Port: 20103,
-	},
-	NodeInfo: NodeInfoConfig{
-		NodeID:  "",
-		Version: "1.0.0",
-	},
-}
+var GlobalConfig Config
 
 var configMu sync.RWMutex
 

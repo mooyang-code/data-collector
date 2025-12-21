@@ -23,6 +23,5 @@ func SyncTasks(ctx context.Context, _ string) error {
 		log.ErrorContextf(ctx, "任务同步失败: %v", err)
 		return err
 	}
-
 	return nil
 }

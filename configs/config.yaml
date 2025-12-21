@@ -1,7 +1,7 @@
 # 主配置文件
 system:
   name: "multi-source-data-collector"
-  version: "v1.0.34"
+  version: "v1.0.43"
   environment: "Production"
   timezone: "UTC"
 

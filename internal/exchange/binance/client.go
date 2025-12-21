@@ -1,15 +1,11 @@
 package binance
 
-import (
-	"time"
+import "github.com/mooyang-code/data-collector/pkg/httpclient"
 
-	"github.com/mooyang-code/data-collector/pkg/httpclient"
-)
-
-// API 基础 URL
+// 域名常量
 const (
-	SpotBaseURL = "https://api.binance.com" // 现货
-	SwapBaseURL = "https://fapi.binance.com" // U本位永续合约
+	SpotDomain = "api.binance.com"  // 现货域名
+	SwapDomain = "fapi.binance.com" // U本位永续合约域名
 )
 
 // API 端点
@@ -20,30 +16,12 @@ const (
 
 // Client 币安客户端
 type Client struct {
-	spotClient *httpclient.Client // 现货客户端
-	swapClient *httpclient.Client // 永续合约客户端
+	*httpclient.HTTPClient
 }
 
 // NewClient 创建币安客户端
 func NewClient() *Client {
 	return &Client{
-		spotClient: httpclient.New(
-			httpclient.WithBaseURL(SpotBaseURL),
-			httpclient.WithTimeout(30*time.Second),
-		),
-		swapClient: httpclient.New(
-			httpclient.WithBaseURL(SwapBaseURL),
-			httpclient.WithTimeout(30*time.Second),
-		),
+		HTTPClient: httpclient.NewHTTPClient(),
 	}
-}
-
-// SpotClient 获取现货客户端
-func (c *Client) SpotClient() *httpclient.Client {
-	return c.spotClient
-}
-
-// SwapClient 获取永续合约客户端
-func (c *Client) SwapClient() *httpclient.Client {
-	return c.swapClient
 }
