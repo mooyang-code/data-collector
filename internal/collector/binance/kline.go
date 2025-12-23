@@ -19,24 +19,27 @@ const (
 
 // KlineCollector K线数据采集器
 type KlineCollector struct {
-	*collector.BaseCollector
-	instType  string   // 产品类型
-	symbol    string   // 交易对
-	intervals []string // K线周期列表
-
-	// API 客户端
-	binanceClient *binanceapi.Client
-	spotAPI       *binanceapi.SpotAPI
-	swapAPI       *binanceapi.SwapAPI
+	client  *binanceapi.Client
+	spotAPI *binanceapi.SpotAPI
+	swapAPI *binanceapi.SwapAPI
 }
 
 // init 自注册到采集器注册中心
 func init() {
+	// 创建采集器实例
+	client := binanceapi.NewClient()
+	c := &KlineCollector{
+		client:  client,
+		spotAPI: binanceapi.NewSpotAPI(client),
+		swapAPI: binanceapi.NewSwapAPI(client),
+	}
+
+	// 注册到全局注册中心
 	err := collector.NewBuilder().
 		Source("binance", "币安").
 		DataType("kline", "K线").
 		Description("币安K线数据采集器").
-		Creator(NewKlineCollector).
+		Collector(c).
 		Register()
 
 	if err != nil {
@@ -44,109 +47,43 @@ func init() {
 	}
 }
 
-// NewKlineCollector 创建K线采集器
-func NewKlineCollector(config map[string]interface{}) (collector.Collector, error) {
-	// 解析 inst_type（必填）
-	instType, ok := config["inst_type"].(string)
-	if !ok || instType == "" {
-		return nil, fmt.Errorf("缺少必填参数 inst_type")
-	}
-
-	// 验证 inst_type
-	if instType != InstTypeSPOT && instType != InstTypeSWAP {
-		return nil, fmt.Errorf("无效的产品类型 inst_type: %s，支持: SPOT, SWAP", instType)
-	}
-
-	// 解析 symbol（必填）
-	symbol, ok := config["symbol"].(string)
-	if !ok || symbol == "" {
-		return nil, fmt.Errorf("缺少必填参数 symbol")
-	}
-
-	// 解析 intervals（必填）
-	intervals, ok := config["intervals"].([]string)
-	if !ok || len(intervals) == 0 {
-		return nil, fmt.Errorf("缺少必填参数 intervals")
-	}
-
-	// 生成唯一的采集器ID
-	collectorID := fmt.Sprintf("binance_kline_%s_%s", instType, symbol)
-
-	// 创建币安客户端
-	binanceClient := binanceapi.NewClient()
-
-	c := &KlineCollector{
-		BaseCollector: collector.NewBaseCollector(collectorID, "market", "kline"),
-		instType:      instType,
-		symbol:        symbol,
-		intervals:     intervals,
-		binanceClient: binanceClient,
-		spotAPI:       binanceapi.NewSpotAPI(binanceClient),
-		swapAPI:       binanceapi.NewSwapAPI(binanceClient),
-	}
-
-	return c, nil
+// Source 返回数据源标识
+func (c *KlineCollector) Source() string {
+	return "binance"
 }
 
-// Initialize 初始化
-func (c *KlineCollector) Initialize(ctx context.Context) error {
-	log.InfoContextf(ctx, "K线采集器初始化: inst_type=%s, symbol=%s, intervals=%v", c.instType, c.symbol, c.intervals)
+// DataType 返回数据类型标识
+func (c *KlineCollector) DataType() string {
+	return "kline"
+}
 
-	// 调用基类初始化
-	if err := c.BaseCollector.Initialize(ctx); err != nil {
+// Collect 执行一次K线采集
+func (c *KlineCollector) Collect(ctx context.Context, params *collector.CollectParams) error {
+	log.InfoContextf(ctx, "K线采集开始: inst_type=%s, symbol=%s, interval=%s",
+		params.InstType, params.Symbol, params.Interval)
+
+	// 从币安 API 获取 K 线数据
+	klines, err := c.fetchKlines(ctx, params)
+	if err != nil {
+		log.ErrorContextf(ctx, "K线采集失败: inst_type=%s, symbol=%s, interval=%s, error=%v",
+			params.InstType, params.Symbol, params.Interval, err)
 		return err
 	}
 
-	// 为每个时间间隔添加定时器
-	for _, interval := range c.intervals {
-		duration, err := market.IntervalDuration(interval)
-		if err != nil {
-			return fmt.Errorf("无效的时间间隔 %s: %w", interval, err)
-		}
-
-		// 创建定时器
-		timerName := fmt.Sprintf("collect_%s", interval)
-		handler := c.createCollectHandler(interval)
-
-		if err := c.AddTimer(ctx, timerName, duration, handler); err != nil {
-			return fmt.Errorf("添加定时器失败 %s: %w", timerName, err)
-		}
-
-		log.InfoContextf(ctx, "K线采集器: 添加定时器 %s, 间隔 %v", timerName, duration)
+	if len(klines) > 0 {
+		log.InfoContextf(ctx, "K线采集完成: inst_type=%s, symbol=%s, interval=%s, count=%d, latest=%+v",
+			params.InstType, params.Symbol, params.Interval, len(klines), klines[0])
 	}
 
-	log.InfoContextf(ctx, "K线采集器初始化完成")
+	// TODO: 发布事件或存储数据
 	return nil
 }
 
-// createCollectHandler 创建采集处理函数
-func (c *KlineCollector) createCollectHandler(interval string) collector.TimerHandler {
-	return func(ctx context.Context) error {
-		log.InfoContextf(ctx, "K线采集开始: inst_type=%s, symbol=%s, interval=%s", c.instType, c.symbol, interval)
-
-		// 从币安 API 获取 K 线数据
-		klines, err := c.fetchKlines(ctx, interval)
-		if err != nil {
-			log.ErrorContextf(ctx, "K线采集失败: inst_type=%s, symbol=%s, interval=%s, error=%v",
-				c.instType, c.symbol, interval, err)
-			return err
-		}
-
-		if len(klines) > 0 {
-			log.InfoContextf(ctx, "K线采集完成: inst_type=%s, symbol=%s, interval=%s, Kline=%+v",
-				c.instType, c.symbol, interval, klines[0])
-		}
-
-		// TODO: 发布事件或存储数据
-		return nil
-	}
-}
-
 // fetchKlines 从币安 API 获取 K 线数据
-func (c *KlineCollector) fetchKlines(ctx context.Context, interval string) ([]*market.Kline, error) {
+func (c *KlineCollector) fetchKlines(ctx context.Context, params *collector.CollectParams) ([]*market.Kline, error) {
 	req := &exchange.KlineRequest{
-		Symbol:   c.symbol,
-		Interval: interval,
+		Symbol:   params.Symbol,
+		Interval: params.Interval,
 		Limit:    5, // 只获取最新的5根K线
 	}
 
@@ -154,13 +91,13 @@ func (c *KlineCollector) fetchKlines(ctx context.Context, interval string) ([]*m
 	var err error
 
 	// 根据产品类型选择 API
-	switch c.instType {
+	switch params.InstType {
 	case InstTypeSPOT:
 		exchangeKlines, err = c.spotAPI.GetKline(ctx, req)
 	case InstTypeSWAP:
 		exchangeKlines, err = c.swapAPI.GetKline(ctx, req)
 	default:
-		return nil, fmt.Errorf("不支持的产品类型: %s", c.instType)
+		return nil, fmt.Errorf("不支持的产品类型: %s", params.InstType)
 	}
 
 	if err != nil {
@@ -170,7 +107,7 @@ func (c *KlineCollector) fetchKlines(ctx context.Context, interval string) ([]*m
 	// 转换为 market.Kline 格式
 	klines := make([]*market.Kline, 0, len(exchangeKlines))
 	for _, ek := range exchangeKlines {
-		kline := market.NewKline("binance", c.symbol, interval)
+		kline := market.NewKline("binance", params.Symbol, params.Interval)
 		kline.OpenTime = ek.OpenTime
 		kline.CloseTime = ek.CloseTime
 		kline.Open = ek.Open

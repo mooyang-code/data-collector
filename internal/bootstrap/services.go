@@ -6,7 +6,6 @@ import (
 
 	_ "github.com/mooyang-code/data-collector/internal/collector/binance" // 注册 binance 采集器
 	"github.com/mooyang-code/data-collector/internal/dnsproxy"
-	"github.com/mooyang-code/data-collector/internal/taskmgr"
 	"github.com/mooyang-code/data-collector/pkg/config"
 	"trpc.group/trpc-go/trpc-go/log"
 )
@@ -24,13 +23,7 @@ func StartBackgroundServices(ctx context.Context) (*Services, error) {
 		return nil, err
 	}
 
-	// 2. 初始化任务管理器
-	if err := initTaskManager(); err != nil {
-		log.Errorf("初始化任务管理器失败: %v", err)
-		return nil, err
-	}
-
-	// 3. 初始化 DNS 代理
+	// 2. 初始化 DNS 代理
 	if err := initDNSProxy(); err != nil {
 		log.Errorf("初始化 DNS 代理失败: %v", err)
 		return nil, err
@@ -38,14 +31,6 @@ func StartBackgroundServices(ctx context.Context) (*Services, error) {
 
 	log.Info("后台服务启动完成")
 	return &Services{}, nil
-}
-
-// initTaskManager 初始化任务管理器
-func initTaskManager() error {
-	log.Info("正在初始化任务管理器...")
-	taskmgr.InitManager()
-	log.Info("任务管理器初始化完成")
-	return nil
 }
 
 // initConfigCaches 初始化配置缓存系统

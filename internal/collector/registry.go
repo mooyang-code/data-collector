@@ -5,19 +5,17 @@ import (
 	"sync"
 )
 
-type CollectorCreatorFunc func(config map[string]interface{}) (Collector, error)
-
+// CollectorDescriptor 采集器描述符
 type CollectorDescriptor struct {
-	Source       string               // 数据源，如 "binance"
-	SourceCN     string               // 数据源中文名
-	DataType     string               // 数据类型，如 "kline"
-	DataTypeCN   string               // 数据类型中文名
-	MarketType   string               // 市场类型，如 "spot"
-	MarketTypeCN string               // 市场类型中文名
-	Description  string               // 描述
-	Creator      CollectorCreatorFunc // 创建函数
+	Source      string    // 数据源，如 "binance"
+	SourceCN    string    // 数据源中文名
+	DataType    string    // 数据类型，如 "kline"
+	DataTypeCN  string    // 数据类型中文名
+	Description string    // 描述
+	Collector   Collector // 采集器实例（无状态，可复用）
 }
 
+// CollectorRegistry 采集器注册中心
 type CollectorRegistry struct {
 	collectors map[string]*CollectorDescriptor
 	mu         sync.RWMutex
@@ -27,26 +25,18 @@ var globalRegistry = &CollectorRegistry{
 	collectors: make(map[string]*CollectorDescriptor),
 }
 
-// RegisterWithDescriptor 使用描述符注册采集器
-func RegisterWithDescriptor(descriptor *CollectorDescriptor) error {
-	return globalRegistry.RegisterWithDescriptor(descriptor)
-}
-
-// Register 简化的注册方法
-func Register(source, dataType string, creator CollectorCreatorFunc) error {
-	return globalRegistry.RegisterWithDescriptor(&CollectorDescriptor{
-		Source:   source,
-		DataType: dataType,
-		Creator:  creator,
-	})
-}
-
 // GetRegistry 获取全局注册表
 func GetRegistry() *CollectorRegistry {
 	return globalRegistry
 }
 
-func (r *CollectorRegistry) RegisterWithDescriptor(descriptor *CollectorDescriptor) error {
+// Register 注册采集器
+func Register(descriptor *CollectorDescriptor) error {
+	return globalRegistry.Register(descriptor)
+}
+
+// Register 注册采集器
+func (r *CollectorRegistry) Register(descriptor *CollectorDescriptor) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -59,7 +49,21 @@ func (r *CollectorRegistry) RegisterWithDescriptor(descriptor *CollectorDescript
 	return nil
 }
 
-func (r *CollectorRegistry) Get(source, dataType string) (*CollectorDescriptor, error) {
+// Get 获取采集器
+func (r *CollectorRegistry) Get(source, dataType string) (Collector, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	key := r.generateKey(source, dataType)
+	descriptor, exists := r.collectors[key]
+	if !exists {
+		return nil, fmt.Errorf("采集器 %s 未注册", key)
+	}
+	return descriptor.Collector, nil
+}
+
+// GetDescriptor 获取采集器描述符
+func (r *CollectorRegistry) GetDescriptor(source, dataType string) (*CollectorDescriptor, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -71,6 +75,7 @@ func (r *CollectorRegistry) Get(source, dataType string) (*CollectorDescriptor, 
 	return descriptor, nil
 }
 
+// List 列出所有采集器描述符
 func (r *CollectorRegistry) List() []*CollectorDescriptor {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -82,6 +87,7 @@ func (r *CollectorRegistry) List() []*CollectorDescriptor {
 	return descriptors
 }
 
+// ListBySource 按数据源列出采集器
 func (r *CollectorRegistry) ListBySource(source string) []*CollectorDescriptor {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -95,61 +101,49 @@ func (r *CollectorRegistry) ListBySource(source string) []*CollectorDescriptor {
 	return descriptors
 }
 
-func (r *CollectorRegistry) CreateCollector(source, dataType string, config map[string]interface{}) (Collector, error) {
-	descriptor, err := r.Get(source, dataType)
-	if err != nil {
-		return nil, err
-	}
-
-	if config == nil {
-		config = make(map[string]interface{})
-	}
-	return descriptor.Creator(config)
-}
-
 func (r *CollectorRegistry) generateKey(source, dataType string) string {
 	return fmt.Sprintf("%s:%s", source, dataType)
 }
 
-// CollectorCreatorBuilder 构建器模式，简化采集器注册
-type CollectorCreatorBuilder struct {
+// CollectorBuilder 构建器模式，简化采集器注册
+type CollectorBuilder struct {
 	descriptor *CollectorDescriptor
 }
 
-func NewBuilder() *CollectorCreatorBuilder {
-	return &CollectorCreatorBuilder{
+// NewBuilder 创建构建器
+func NewBuilder() *CollectorBuilder {
+	return &CollectorBuilder{
 		descriptor: &CollectorDescriptor{},
 	}
 }
 
-func (b *CollectorCreatorBuilder) Source(source, sourceCN string) *CollectorCreatorBuilder {
+// Source 设置数据源
+func (b *CollectorBuilder) Source(source, sourceCN string) *CollectorBuilder {
 	b.descriptor.Source = source
 	b.descriptor.SourceCN = sourceCN
 	return b
 }
 
-func (b *CollectorCreatorBuilder) DataType(dataType, dataTypeCN string) *CollectorCreatorBuilder {
+// DataType 设置数据类型
+func (b *CollectorBuilder) DataType(dataType, dataTypeCN string) *CollectorBuilder {
 	b.descriptor.DataType = dataType
 	b.descriptor.DataTypeCN = dataTypeCN
 	return b
 }
 
-func (b *CollectorCreatorBuilder) MarketType(marketType, marketTypeCN string) *CollectorCreatorBuilder {
-	b.descriptor.MarketType = marketType
-	b.descriptor.MarketTypeCN = marketTypeCN
-	return b
-}
-
-func (b *CollectorCreatorBuilder) Description(description string) *CollectorCreatorBuilder {
+// Description 设置描述
+func (b *CollectorBuilder) Description(description string) *CollectorBuilder {
 	b.descriptor.Description = description
 	return b
 }
 
-func (b *CollectorCreatorBuilder) Creator(creator CollectorCreatorFunc) *CollectorCreatorBuilder {
-	b.descriptor.Creator = creator
+// Collector 设置采集器实例
+func (b *CollectorBuilder) Collector(collector Collector) *CollectorBuilder {
+	b.descriptor.Collector = collector
 	return b
 }
 
-func (b *CollectorCreatorBuilder) Register() error {
-	return RegisterWithDescriptor(b.descriptor)
+// Register 注册采集器
+func (b *CollectorBuilder) Register() error {
+	return Register(b.descriptor)
 }

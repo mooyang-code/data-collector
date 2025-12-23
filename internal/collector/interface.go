@@ -2,76 +2,23 @@ package collector
 
 import (
 	"context"
-	"time"
 )
 
+// Collector 采集器接口（简化版）
+// 采集器只负责执行一次采集操作，不再管理生命周期和定时器
 type Collector interface {
-	// 基础信息
-	ID() string
-	Type() string
+	// Source 数据源标识，如 "binance", "okx"
+	Source() string
+	// DataType 数据类型标识，如 "kline", "ticker", "news"
 	DataType() string
-
-	// 生命周期
-	Initialize(ctx context.Context) error
-	Start(ctx context.Context) error
-	Stop(ctx context.Context) error
-
-	// 定时器管理
-	AddTimer(ctx context.Context, name string, interval time.Duration, handler TimerHandler) error
-	RemoveTimer(name string) error
-	GetTimers() map[string]*Timer
-
-	// 状态监控
-	IsRunning() bool
-	GetStatus() CollectorStatus
-	GetMetrics() CollectorMetrics
+	// Collect 执行一次采集
+	// params 包含本次采集所需的参数（如交易对、周期等）
+	Collect(ctx context.Context, params *CollectParams) error
 }
 
-type TimerHandler func(ctx context.Context) error
-
-type Timer struct {
-	Name       string
-	Interval   time.Duration
-	Handler    TimerHandler
-	LastRun    time.Time
-	NextRun    time.Time
-	RunCount   int64
-	ErrorCount int64
-	ticker     *time.Ticker
-}
-
-type CollectorStatus struct {
-	ID         string
-	Type       string
-	DataType   string
-	IsRunning  bool
-	StartTime  time.Time
-	LastUpdate time.Time
-	Timers     map[string]TimerStatus
-}
-
-type TimerStatus struct {
-	Name       string
-	Interval   time.Duration
-	LastRun    time.Time
-	NextRun    time.Time
-	RunCount   int64
-	ErrorCount int64
-}
-
-type CollectorMetrics struct {
-	StartTime       time.Time
-	DataCollected   int64
-	EventsPublished int64
-	ErrorsTotal     int64
-	LastError       error
-	LastErrorTime   time.Time
-	TimerMetrics    map[string]TimerMetrics
-}
-
-type TimerMetrics struct {
-	RunCount   int64
-	ErrorCount int64
-	LastRun    time.Time
-	AvgLatency time.Duration
+// CollectParams 采集参数
+type CollectParams struct {
+	InstType string // 产品类型: SPOT, SWAP
+	Symbol   string // 交易对: BTC-USDT
+	Interval string // 周期（K线用）: 1m, 5m, 1h
 }

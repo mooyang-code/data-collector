@@ -2,15 +2,15 @@ package bootstrap
 
 import (
 	"github.com/mooyang-code/data-collector/internal/dnsproxy"
+	"github.com/mooyang-code/data-collector/internal/executor"
 	"github.com/mooyang-code/data-collector/internal/heartbeat"
-	"github.com/mooyang-code/data-collector/internal/taskmgr"
 	"github.com/mooyang-code/go-commlib/trpc-database/timer"
 	"trpc.group/trpc-go/trpc-go"
 	"trpc.group/trpc-go/trpc-go/log"
 )
 
 // RegisterTRPCServices 注册所有TRPC服务并启动服务
-// 包括：心跳定时器服务、任务同步定时器服务、DNS获取定时器服务
+// 包括：心跳定时器服务、采集执行定时器服务、DNS获取定时器服务
 func RegisterTRPCServices() error {
 	log.Info("正在初始化TRPC服务...")
 
@@ -22,10 +22,10 @@ func RegisterTRPCServices() error {
 	timer.RegisterScheduler("heartbeatSchedule", &timer.DefaultScheduler{})
 	timer.RegisterHandlerService(s.Service("trpc.heartbeat.timer"), heartbeat.ScheduledHeartbeat)
 
-	// 注册任务同步定时器
-	log.Info("注册任务同步定时器...")
-	timer.RegisterScheduler("taskSyncSchedule", &timer.DefaultScheduler{})
-	timer.RegisterHandlerService(s.Service("trpc.tasksync.timer"), taskmgr.SyncTasks)
+	// 注册采集执行定时器（每分钟整点触发）
+	log.Info("注册采集执行定时器...")
+	timer.RegisterScheduler("collectExecSchedule", &timer.DefaultScheduler{})
+	timer.RegisterHandlerService(s.Service("trpc.collectexec.timer"), executor.ScheduledExecute)
 
 	// 注册 DNS 获取定时器
 	log.Info("注册 DNS 获取定时器...")
