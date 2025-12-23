@@ -12,6 +12,7 @@ import (
 
 	"github.com/avast/retry-go"
 	"github.com/mooyang-code/data-collector/pkg/config"
+	"trpc.group/trpc-go/trpc-go"
 	"trpc.group/trpc-go/trpc-go/log"
 )
 
@@ -32,7 +33,8 @@ type ServerDNSRecord struct {
 }
 
 // ScheduledFetchDNS 定时器入口函数 - 定时获取 DNS 记录
-func ScheduledFetchDNS(ctx context.Context, _ string) error {
+func ScheduledFetchDNS(c context.Context, _ string) error {
+	ctx := trpc.CloneContext(c)
 	nodeID, version := config.GetNodeInfo()
 	log.WithContextFields(ctx, "func", "ScheduledFetchDNS", "version", version, "nodeID", nodeID)
 
@@ -69,7 +71,7 @@ func FetchDNSRecords(ctx context.Context) error {
 		return fmt.Errorf("failed to parse DNS response: %w", err)
 	}
 
-	log.InfoContextf(ctx, "Fetched %d DNS records from server", len(serverRecords))
+	log.DebugContextf(ctx, "Fetched %d DNS records from server", len(serverRecords))
 
 	// 5. 对每个域名的 IP 列表进行 ping 检测和排序，转换为内部格式
 	records := make([]*DNSRecord, 0, len(serverRecords))
@@ -88,7 +90,7 @@ func FetchDNSRecords(ctx context.Context) error {
 				availableCount++
 			}
 		}
-		log.InfoContextf(ctx, "Domain %s: %d/%d IPs available", srvRecord.Domain, availableCount, len(ips))
+		log.DebugContextf(ctx, "Domain %s: %d/%d IPs available", srvRecord.Domain, availableCount, len(ips))
 
 		// 创建 DNSRecord
 		record := &DNSRecord{
@@ -103,7 +105,7 @@ func FetchDNSRecords(ctx context.Context) error {
 	// 6. 更新全局变量
 	updateDNSRecords(records)
 
-	log.InfoContextf(ctx, "DNS records updated successfully, total: %d", len(records))
+	log.DebugContextf(ctx, "DNS records updated successfully, total: %d", len(records))
 	return nil
 }
 

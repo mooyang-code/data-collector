@@ -132,8 +132,10 @@ func (c *KlineCollector) createCollectHandler(interval string) collector.TimerHa
 			return err
 		}
 
-		log.InfoContextf(ctx, "K线采集完成: inst_type=%s, symbol=%s, interval=%s, count=%d",
-			c.instType, c.symbol, interval, len(klines))
+		if len(klines) > 0 {
+			log.InfoContextf(ctx, "K线采集完成: inst_type=%s, symbol=%s, interval=%s, Kline=%+v",
+				c.instType, c.symbol, interval, klines[0])
+		}
 
 		// TODO: 发布事件或存储数据
 		return nil
@@ -145,7 +147,7 @@ func (c *KlineCollector) fetchKlines(ctx context.Context, interval string) ([]*m
 	req := &exchange.KlineRequest{
 		Symbol:   c.symbol,
 		Interval: interval,
-		Limit:    1, // 只获取最新的一根K线
+		Limit:    5, // 只获取最新的5根K线
 	}
 
 	var exchangeKlines []*exchange.Kline
@@ -178,9 +180,7 @@ func (c *KlineCollector) fetchKlines(ctx context.Context, interval string) ([]*m
 		kline.Volume = ek.Volume
 		kline.QuoteVolume = ek.QuoteVolume
 		kline.TradeCount = ek.TradeCount
-
 		klines = append(klines, kline)
 	}
-
 	return klines, nil
 }

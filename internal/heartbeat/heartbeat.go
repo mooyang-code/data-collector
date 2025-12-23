@@ -14,6 +14,7 @@ import (
 	"github.com/mooyang-code/data-collector/pkg/config"
 	"github.com/mooyang-code/data-collector/pkg/model"
 	"github.com/tencentyun/scf-go-lib/functioncontext"
+	"trpc.group/trpc-go/trpc-go"
 	"trpc.group/trpc-go/trpc-go/log"
 )
 
@@ -26,7 +27,8 @@ type ServerResponse struct {
 }
 
 // ScheduledHeartbeat 框架定时器入口函数 - 定时心跳
-func ScheduledHeartbeat(ctx context.Context, _ string) error {
+func ScheduledHeartbeat(c context.Context, _ string) error {
+	ctx := trpc.CloneContext(c)
 	nodeID, version := config.GetNodeInfo()
 	log.WithContextFields(ctx, "func", "ScheduledHeartbeat", "version", version, "nodeID", nodeID)
 
@@ -78,25 +80,23 @@ func ReportHeartbeat(ctx context.Context) error {
 
 // ProcessProbe 处理心跳探测请求【服务端来的探测请求】
 func ProcessProbe(ctx context.Context, event model.CloudFunctionEvent) (*model.Response, error) {
-	log.InfoContextf(ctx, "[ProcessProbe] 开始处理探测请求")
-
 	// 从上下文获取云函数信息，更新NodeID
 	funcCtx, ok := functioncontext.FromContext(ctx)
 	if ok && funcCtx.FunctionName != "" {
 		currentNodeID, currentVersion := config.GetNodeInfo()
-		log.InfoContextf(ctx, "[ProcessProbe] 当前 NodeID=%s, 云函数名=%s", currentNodeID, funcCtx.FunctionName)
+		log.WithContextFields(ctx, "func", "ProcessProbe", "version", currentVersion, "nodeID", currentNodeID)
 
 		// 无条件更新 NodeID 为云函数名称
 		config.UpdateNodeInfo(funcCtx.FunctionName, currentVersion)
-		log.InfoContextf(ctx, "[ProcessProbe] NodeID 已更新为 %s", funcCtx.FunctionName)
+		log.DebugContextf(ctx, "[ProcessProbe] NodeID 已更新为 %s", funcCtx.FunctionName)
 	} else {
 		log.WarnContextf(ctx, "[ProcessProbe] 无法从上下文获取云函数信息, ok=%v", ok)
 	}
 
 	// 更新服务端连接信息的配置（用于本节点 主动上报心跳和拉取配置）
-	log.InfoContextf(ctx, "[ProcessProbe] event.ServerIP=%s, event.ServerPort=%d", event.ServerIP, event.ServerPort)
+	log.DebugContextf(ctx, "[ProcessProbe] event.ServerIP=%s, event.ServerPort=%d", event.ServerIP, event.ServerPort)
 	if event.ServerIP != "" && event.ServerPort > 0 {
-		log.InfoContextf(ctx, "[ProcessProbe] 更新服务端地址 %s:%d", event.ServerIP, event.ServerPort)
+		log.DebugContextf(ctx, "[ProcessProbe] 更新服务端地址 %s:%d", event.ServerIP, event.ServerPort)
 		config.UpdateServerInfo(event.ServerIP, event.ServerPort)
 		config.UpdateCompassMap(map[string]string{
 			config.MooxServerServiceName: fmt.Sprintf("%s:%d", event.ServerIP, event.ServerPort),
@@ -104,9 +104,10 @@ func ProcessProbe(ctx context.Context, event model.CloudFunctionEvent) (*model.R
 
 		// 验证更新是否成功
 		verifyIP, verifyPort := config.GetServerInfo()
-		log.InfoContextf(ctx, "[ProcessProbe] 验证更新后的服务端地址: %s:%d", verifyIP, verifyPort)
+		log.DebugContextf(ctx, "[ProcessProbe] 验证更新后的服务端地址: %s:%d", verifyIP, verifyPort)
 	} else {
-		log.WarnContextf(ctx, "[ProcessProbe] 服务端地址信息缺失 ServerIP=%s, ServerPort=%d", event.ServerIP, event.ServerPort)
+		log.WarnContextf(ctx, "[ProcessProbe] 服务端地址信息缺失 ServerIP=%s, ServerPort=%d",
+			event.ServerIP, event.ServerPort)
 	}
 
 	// 构建响应数据

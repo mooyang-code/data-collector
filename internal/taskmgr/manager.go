@@ -62,7 +62,6 @@ func (m *TaskManager) Sync(ctx context.Context) error {
 		log.DebugContext(ctx, "NodeID 为空，跳过本次任务同步")
 		return nil
 	}
-	log.DebugContextf(ctx, "当前节点 NodeID: %s", nodeID)
 
 	// 获取本节点最新任务列表
 	newTasks := config.GetTaskInstancesByNode(nodeID)

@@ -245,8 +245,9 @@ func (s *CronScheduler) intervalToCron(interval time.Duration) string {
 func (s *CronScheduler) wrapHandler(task *Task) func() {
 	return func() {
 		// 使用克隆的上下文执行任务，保留链路追踪信息
+		// 如果上下文已被取消，切换到 Background 上下文以确保任务能继续执行
 		ctx := task.BaseCtx
-		if ctx == nil {
+		if ctx == nil || ctx.Err() != nil {
 			ctx = context.Background()
 		}
 		s.executeTask(ctx, task)

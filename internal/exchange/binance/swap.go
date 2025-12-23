@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"time"
 
+	"github.com/avast/retry-go"
 	"github.com/mooyang-code/data-collector/internal/exchange"
+	"trpc.group/trpc-go/trpc-go/log"
 )
 
 // SwapAPI 永续合约 API
@@ -41,9 +44,21 @@ func (api *SwapAPI) GetKline(ctx context.Context, req *exchange.KlineRequest) ([
 		params.Set("endTime", strconv.FormatInt(req.EndTime.UnixMilli(), 10))
 	}
 
-	// 发送请求
+	// 发送请求（带重试）
 	var rawKlines []CandleStick
-	if err := api.client.Get(ctx, SwapDomain, SwapKlineEndpoint, params, &rawKlines); err != nil {
+	err := retry.Do(
+		func() error {
+			return api.client.Get(ctx, SwapDomain, SwapKlineEndpoint, params, &rawKlines)
+		},
+		retry.Attempts(3),
+		retry.Delay(1*time.Second),
+		retry.LastErrorOnly(true),
+		retry.OnRetry(func(n uint, err error) {
+			log.WarnContextf(ctx, "[SwapAPI] 获取K线重试 #%d, symbol=%s, interval=%s, err=%v", n+1, symbol, req.Interval, err)
+		}),
+		retry.Context(ctx),
+	)
+	if err != nil {
 		return nil, fmt.Errorf("获取永续合约K线失败: %w", err)
 	}
 

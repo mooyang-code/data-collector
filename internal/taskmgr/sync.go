@@ -4,12 +4,14 @@ import (
 	"context"
 
 	"github.com/mooyang-code/data-collector/pkg/config"
+	"trpc.group/trpc-go/trpc-go"
 	"trpc.group/trpc-go/trpc-go/log"
 )
 
 // SyncTasks 框架定时器入口函数 - 定时同步任务配置
 // 该函数由 TRPC 定时器框架调用
-func SyncTasks(ctx context.Context, _ string) error {
+func SyncTasks(c context.Context, _ string) error {
+	ctx := trpc.CloneContext(c)
 	nodeID, version := config.GetNodeInfo()
 	log.WithContextFields(ctx, "func", "SyncTasks", "version", version, "nodeID", nodeID)
 
