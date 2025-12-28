@@ -39,24 +39,29 @@ func NewHTTPClient() *HTTPClient {
 
 // Get 发送 GET 请求（自动获取最优 IP）
 func (c *HTTPClient) Get(ctx context.Context, domain, path string, query url.Values, result interface{}) error {
+	// 尝试获取最优 IP
+	bestIP := dnsproxy.GetBestIP(domain)
+	return c.GetWithIP(ctx, domain, path, query, result, bestIP)
+}
+
+// GetWithIP 发送 GET 请求（使用指定的 IP）
+// specifiedIP: 指定使用的 IP 地址，如果为空则使用域名直接访问
+func (c *HTTPClient) GetWithIP(ctx context.Context, domain, path string, query url.Values, result interface{}, specifiedIP string) error {
 	// 构建完整 URL（使用域名，保证 TLS SNI 正确）
 	fullURL := fmt.Sprintf("https://%s%s", domain, path)
 	if len(query) > 0 {
 		fullURL += "?" + query.Encode()
 	}
 
-	// 尝试获取最优 IP
-	bestIP := dnsproxy.GetBestIP(domain)
-
-	// 创建自定义 Dialer（将域名解析到最优 IP）
+	// 创建自定义 Dialer（将域名解析到指定 IP）
 	var dialer *net.Dialer
-	if bestIP != "" {
-		log.DebugContextf(ctx, "使用最优 IP 访问 %s: %s", domain, bestIP)
+	if specifiedIP != "" {
+		log.DebugContextf(ctx, "使用指定 IP 访问 %s: %s", domain, specifiedIP)
 		dialer = &net.Dialer{
 			Timeout: 10 * time.Second,
 		}
 
-		// 设置自定义 Transport，将域名解析到最优 IP
+		// 设置自定义 Transport，将域名解析到指定 IP
 		transport := c.httpClient.Transport.(*http.Transport).Clone()
 		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 			// 提取端口号
@@ -65,8 +70,8 @@ func (c *HTTPClient) Get(ctx context.Context, domain, path string, query url.Val
 				port = "443" // 默认 HTTPS 端口
 			}
 
-			// 使用最优 IP 进行连接
-			targetAddr := net.JoinHostPort(bestIP, port)
+			// 使用指定 IP 进行连接
+			targetAddr := net.JoinHostPort(specifiedIP, port)
 			log.DebugContextf(ctx, "DialContext: 将 %s 解析到 %s", addr, targetAddr)
 			return dialer.DialContext(ctx, network, targetAddr)
 		}
@@ -80,7 +85,7 @@ func (c *HTTPClient) Get(ctx context.Context, domain, path string, query url.Val
 	}
 
 	// 降级：直接使用域名（标准 DNS 解析）
-	log.DebugContextf(ctx, "未找到最优 IP，直接使用域名: %s", domain)
+	log.DebugContextf(ctx, "未找到指定 IP，直接使用域名: %s", domain)
 	return c.doRequest(ctx, c.httpClient, fullURL, domain, result)
 }
 

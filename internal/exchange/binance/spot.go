@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/avast/retry-go"
+	"github.com/mooyang-code/data-collector/internal/dnsproxy"
 	"github.com/mooyang-code/data-collector/internal/exchange"
 	"trpc.group/trpc-go/trpc-go/log"
 )
@@ -44,17 +45,39 @@ func (api *SpotAPI) GetKline(ctx context.Context, req *exchange.KlineRequest) ([
 		params.Set("endTime", strconv.FormatInt(req.EndTime.UnixMilli(), 10))
 	}
 
-	// 发送请求（带重试）
+	// 发送请求（带重试，失败时切换IP）
 	var rawKlines []CandleStick
+	var triedIPs []string // 记录已尝试失败的IP列表
+
 	err := retry.Do(
 		func() error {
-			return api.client.Get(ctx, SpotDomain, SpotKlineEndpoint, params, &rawKlines)
+			// 获取下一个可用的IP（排除已失败的IP）
+			currentIP := dnsproxy.GetNextAvailableIP(SpotDomain, triedIPs)
+
+			// 如果没有可用的IP，直接返回失败，不再重试
+			if currentIP == "" {
+				log.WarnContextf(ctx, "[SpotAPI] 无可用IP，symbol=%s, interval=%s, 已尝试IP: %v",
+					symbol, req.Interval, triedIPs)
+				// 返回 retry.Unrecoverable 让重试立即停止
+				return retry.Unrecoverable(fmt.Errorf("无可用IP访问 %s", SpotDomain))
+			}
+
+			// 使用指定IP发送请求
+			err := api.client.GetWithIP(ctx, SpotDomain, SpotKlineEndpoint, params, &rawKlines, currentIP)
+			if err != nil {
+				// 请求失败，记录这个IP
+				triedIPs = append(triedIPs, currentIP)
+				log.WarnContextf(ctx, "[SpotAPI] IP %s 请求失败，加入排除列表", currentIP)
+				return err
+			}
+			return nil
 		},
 		retry.Attempts(3),
 		retry.Delay(1*time.Second),
 		retry.LastErrorOnly(true),
 		retry.OnRetry(func(n uint, err error) {
-			log.WarnContextf(ctx, "[SpotAPI] 获取K线重试 #%d, symbol=%s, interval=%s, err=%v", n+1, symbol, req.Interval, err)
+			log.WarnContextf(ctx, "[SpotAPI] 获取K线重试 #%d, symbol=%s, interval=%s, err=%v",
+				n+1, symbol, req.Interval, err)
 		}),
 		retry.Context(ctx),
 	)
@@ -71,6 +94,5 @@ func (api *SpotAPI) GetKline(ctx context.Context, req *exchange.KlineRequest) ([
 		}
 		klines = append(klines, kline)
 	}
-
 	return klines, nil
 }

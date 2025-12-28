@@ -72,6 +72,33 @@ func GetAvailableIPs(domain string) []string {
 	return ips
 }
 
+// GetNextAvailableIP 获取指定域名的下一个可用 IP（排除指定的 IP）
+// excludeIPs: 需要排除的 IP 列表（已尝试失败的 IP）
+// 返回值: 下一个可用的 IP，如果没有则返回空字符串
+func GetNextAvailableIP(domain string, excludeIPs []string) string {
+	dnsMutex.RLock()
+	defer dnsMutex.RUnlock()
+
+	record, exists := dnsRecords[domain]
+	if !exists || record == nil || len(record.IPList) == 0 {
+		return ""
+	}
+
+	// 构建排除IP的map，用于快速查找
+	excludeMap := make(map[string]bool)
+	for _, ip := range excludeIPs {
+		excludeMap[ip] = true
+	}
+
+	// 返回第一个可用且未被排除的 IP
+	for _, ipInfo := range record.IPList {
+		if ipInfo.Available && !excludeMap[ipInfo.IP] {
+			return ipInfo.IP
+		}
+	}
+	return ""
+}
+
 // GetDNSRecord 获取指定域名的完整 DNS 记录
 func GetDNSRecord(domain string) *DNSRecord {
 	dnsMutex.RLock()

@@ -1,6 +1,11 @@
 package binance
 
-import "github.com/mooyang-code/data-collector/pkg/httpclient"
+import (
+	"context"
+	"net/url"
+
+	"github.com/mooyang-code/data-collector/pkg/httpclient"
+)
 
 // 域名常量
 const (
@@ -24,4 +29,10 @@ func NewClient() *Client {
 	return &Client{
 		HTTPClient: httpclient.NewHTTPClient(),
 	}
+}
+
+// GetWithIP 发送 GET 请求（使用指定的 IP）
+// 这是对 HTTPClient.GetWithIP 的简单封装，方便在重试逻辑中使用
+func (c *Client) GetWithIP(ctx context.Context, domain, path string, query url.Values, result interface{}, specifiedIP string) error {
+	return c.HTTPClient.GetWithIP(ctx, domain, path, query, result, specifiedIP)
 }

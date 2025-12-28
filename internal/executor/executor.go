@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/mooyang-code/data-collector/internal/collector"
+	"github.com/mooyang-code/data-collector/internal/reporter"
 	"github.com/mooyang-code/data-collector/pkg/config"
 	"trpc.group/trpc-go/trpc-go"
 	"trpc.group/trpc-go/trpc-go/log"
@@ -68,9 +69,14 @@ func ScheduledExecute(c context.Context, _ string) error {
 				if err := collectorCopy.Collect(ctx, params); err != nil {
 					log.ErrorContextf(ctx, "采集失败: taskID=%s, interval=%s, error=%v",
 						taskCopy.TaskID, intervalCopy, err)
+					// 异步上报失败状态
+					reporter.ReportTaskStatusAsync(ctx, taskCopy.TaskID, reporter.StatusFailed, err.Error())
 					// 返回 nil 以便其他任务继续执行
 					return nil
 				}
+
+				// 异步上报成功状态
+				reporter.ReportTaskStatusAsync(ctx, taskCopy.TaskID, reporter.StatusSuccess, "")
 				return nil
 			})
 		}

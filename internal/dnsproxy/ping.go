@@ -11,17 +11,23 @@ import (
 	"trpc.group/trpc-go/trpc-go"
 )
 
-// pingAndSort 对 IP 列表进行延迟检测并排序
-func pingAndSort(ctx context.Context, ips []string) []*IPInfo {
+// probeAndSort 对 IP 列表进行探测并排序
+// domain: 域名，用于查找探测配置
+// ips: IP 列表
+func probeAndSort(ctx context.Context, domain string, ips []string) []*IPInfo {
 	var ipInfoList []*IPInfo
 	var mu sync.Mutex
 
-	// 使用 trpc.GoAndWait 并发 ping
+	// 获取该域名的探测配置
+	probeConfig := getProbeConfig(domain)
+
+	// 使用 trpc.GoAndWait 并发探测
 	var handlers []func() error
 	for _, ip := range ips {
 		ipAddr := ip
 		handlers = append(handlers, func() error {
-			latency, available := pingIP(ctx, ipAddr)
+			// 调用统一的探测接口
+			latency, available := probeIP(ctx, ipAddr, domain, probeConfig)
 			ipInfo := &IPInfo{
 				IP:        ipAddr,
 				Latency:   latency,

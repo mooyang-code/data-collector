@@ -73,15 +73,15 @@ func FetchDNSRecords(ctx context.Context) error {
 
 	log.DebugContextf(ctx, "Fetched %d DNS records from server", len(serverRecords))
 
-	// 5. 对每个域名的 IP 列表进行 ping 检测和排序，转换为内部格式
+	// 5. 对每个域名的 IP 列表进行探测和排序，转换为内部格式
 	records := make([]*DNSRecord, 0, len(serverRecords))
 	for _, srvRecord := range serverRecords {
 		// 从 best_ips 中解析 IP 列表
 		ips := parseBestIPs(srvRecord.BestIPs)
-		log.DebugContextf(ctx, "Domain %s has %d IPs to ping", srvRecord.Domain, len(ips))
+		log.DebugContextf(ctx, "Domain %s has %d IPs to probe", srvRecord.Domain, len(ips))
 
-		// 调用 pingAndSort
-		ipList := pingAndSort(ctx, ips)
+		// 调用 probeAndSort（传递域名，内部会查找探测配置）
+		ipList := probeAndSort(ctx, srvRecord.Domain, ips)
 
 		// 记录可用 IP 数量
 		availableCount := 0
