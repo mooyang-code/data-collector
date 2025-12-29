@@ -2,11 +2,13 @@ package executor
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/mooyang-code/data-collector/internal/collector"
 	"github.com/mooyang-code/data-collector/internal/reporter"
 	"github.com/mooyang-code/data-collector/pkg/config"
+	"github.com/mooyang-code/data-collector/pkg/model"
 	"trpc.group/trpc-go/trpc-go"
 	"trpc.group/trpc-go/trpc-go/log"
 )
@@ -146,4 +148,93 @@ func shouldExecute(interval string, now time.Time) bool {
 		log.Warnf("未知的时间周期: %s", interval)
 		return false
 	}
+}
+
+// ExecuteTaskImmediately 立即执行任务（服务端触发的任务转移）
+// 用于任务失败后，服务端将任务转移到其他节点立即执行
+// 注意：客户端在上报失败前已经进行了多次重试，这里直接执行即可
+func ExecuteTaskImmediately(ctx context.Context, taskEvent *model.TaskExecuteEvent) (string, error) {
+	if taskEvent == nil {
+		return "", fmt.Errorf("taskEvent is nil")
+	}
+
+	log.InfoContextf(ctx, "[ExecuteTaskImmediately] Starting immediate execution: taskID=%s, symbol=%s",
+		taskEvent.TaskID, taskEvent.Symbol)
+
+	// 1. 获取采集器
+	c, err := collector.GetRegistry().Get(taskEvent.DataSource, taskEvent.DataType)
+	if err != nil {
+		errMsg := fmt.Sprintf("采集器未找到: source=%s, dataType=%s", taskEvent.DataSource, taskEvent.DataType)
+		log.ErrorContextf(ctx, "[ExecuteTaskImmediately] %s", errMsg)
+		// 异步上报失败状态
+		reporter.ReportTaskStatusAsync(ctx, taskEvent.TaskID, reporter.StatusFailed, errMsg)
+		return "", fmt.Errorf(errMsg)
+	}
+
+	// 2. 执行所有 interval 的采集任务
+	var handlers []func() error
+	var hasError bool
+	var lastError string
+
+	for _, interval := range taskEvent.Intervals {
+		// 捕获变量，避免闭包问题
+		intervalCopy := interval
+		collectorCopy := c
+		taskEventCopy := taskEvent
+
+		handlers = append(handlers, func() error {
+			params := &collector.CollectParams{
+				InstType: taskEventCopy.InstType,
+				Symbol:   taskEventCopy.Symbol,
+				Interval: intervalCopy,
+			}
+
+			log.InfoContextf(ctx, "[ExecuteTaskImmediately] 执行采集: taskID=%s, source=%s, dataType=%s, symbol=%s, interval=%s",
+				taskEventCopy.TaskID, taskEventCopy.DataSource, taskEventCopy.DataType, taskEventCopy.Symbol, intervalCopy)
+
+			if err := collectorCopy.Collect(ctx, params); err != nil {
+				log.ErrorContextf(ctx, "[ExecuteTaskImmediately] 采集失败: taskID=%s, interval=%s, error=%v",
+					taskEventCopy.TaskID, intervalCopy, err)
+				hasError = true
+				lastError = err.Error()
+				return err
+			}
+
+			log.InfoContextf(ctx, "[ExecuteTaskImmediately] 采集成功: taskID=%s, interval=%s",
+				taskEventCopy.TaskID, intervalCopy)
+			return nil
+		})
+	}
+
+	if len(handlers) == 0 {
+		errMsg := "没有需要执行的interval"
+		log.WarnContextf(ctx, "[ExecuteTaskImmediately] %s", errMsg)
+		reporter.ReportTaskStatusAsync(ctx, taskEvent.TaskID, reporter.StatusFailed, errMsg)
+		return "", fmt.Errorf(errMsg)
+	}
+
+	log.InfoContextf(ctx, "[ExecuteTaskImmediately] 并发执行 %d 个采集任务", len(handlers))
+
+	// 3. 并发执行所有采集任务
+	_ = trpc.GoAndWait(handlers...)
+
+	// 4. 根据执行结果上报状态
+	var resultMsg string
+	var status int
+
+	if hasError {
+		status = reporter.StatusFailed
+		resultMsg = fmt.Sprintf("部分或全部任务执行失败, lastError=%s", lastError)
+	} else {
+		status = reporter.StatusSuccess
+		resultMsg = "所有任务执行成功"
+	}
+
+	log.InfoContextf(ctx, "[ExecuteTaskImmediately] 任务执行完成: taskID=%s, status=%d, result=%s",
+		taskEvent.TaskID, status, resultMsg)
+
+	// 异步上报任务状态
+	reporter.ReportTaskStatusAsync(ctx, taskEvent.TaskID, status, resultMsg)
+
+	return resultMsg, nil
 }

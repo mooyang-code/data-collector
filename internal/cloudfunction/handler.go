@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mooyang-code/data-collector/internal/executor"
 	"github.com/mooyang-code/data-collector/internal/heartbeat"
 	"github.com/mooyang-code/data-collector/pkg/config"
 	"github.com/mooyang-code/data-collector/pkg/model"
@@ -89,16 +90,56 @@ func (h *CloudFunctionHandler) handleConfig(ctx context.Context, event model.Clo
 	}, nil
 }
 
-// handleTask 处理任务事件
+// handleTask 处理任务事件（服务端触发的任务立即执行）
 func (h *CloudFunctionHandler) handleTask(ctx context.Context, event model.CloudFunctionEvent) (*model.Response, error) {
-	// TODO: 实现任务处理逻辑
-	log.Infof("处理任务事件, action: %s", event.Action)
+	log.InfoContextf(ctx, "[handleTask] 收到任务执行请求, data: %v", event.Data)
+
+	// 1. 解析任务执行事件
+	var taskEvent model.TaskExecuteEvent
+	eventDataJSON, err := json.Marshal(event.Data)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to marshal event data: %v", err)
+		log.ErrorContextf(ctx, "[handleTask] %s", errMsg)
+		return h.errorResponse("invalid_task_data", errMsg), nil
+	}
+
+	if err := json.Unmarshal(eventDataJSON, &taskEvent); err != nil {
+		errMsg := fmt.Sprintf("failed to unmarshal task event: %v", err)
+		log.ErrorContextf(ctx, "[handleTask] %s", errMsg)
+		return h.errorResponse("invalid_task_data", errMsg), nil
+	}
+
+	// 2. 验证必要字段
+	if taskEvent.TaskID == "" {
+		errMsg := "task_id is required"
+		log.ErrorContextf(ctx, "[handleTask] %s", errMsg)
+		return h.errorResponse("invalid_task_data", errMsg), nil
+	}
+
+	log.InfoContextf(ctx, "[handleTask] 开始执行任务: taskID=%s, symbol=%s, intervals=%v",
+		taskEvent.TaskID, taskEvent.Symbol, taskEvent.Intervals)
+
+	// 3. 调用 executor 立即执行任务
+	result, err := executor.ExecuteTaskImmediately(ctx, &taskEvent)
+	if err != nil {
+		log.ErrorContextf(ctx, "[handleTask] 任务执行失败: taskID=%s, error=%v", taskEvent.TaskID, err)
+		return &model.Response{
+			Success:   false,
+			Message:   fmt.Sprintf("task execution failed: %v", err),
+			Data:      map[string]interface{}{"task_id": taskEvent.TaskID, "result": result},
+			RequestID: event.RequestID,
+			Timestamp: time.Now(),
+		}, nil
+	}
+
+	log.InfoContextf(ctx, "[handleTask] 任务执行完成: taskID=%s, result=%s", taskEvent.TaskID, result)
 
 	return &model.Response{
 		Success: true,
-		Message: "task processed successfully",
+		Message: "task executed successfully",
 		Data: map[string]interface{}{
-			"action": event.Action,
+			"task_id": taskEvent.TaskID,
+			"result":  result,
 		},
 		RequestID: event.RequestID,
 		Timestamp: time.Now(),

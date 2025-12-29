@@ -134,6 +134,17 @@ type CloudFunctionEvent struct {
 	ServerPort int                    `json:"server_port"`      // 服务端心跳API端口
 }
 
+// TaskExecuteEvent 任务立即执行事件（服务端触发）
+type TaskExecuteEvent struct {
+	TaskID     string   `json:"task_id"`
+	DataType   string   `json:"data_type"`
+	DataSource string   `json:"data_source"`
+	InstType   string   `json:"inst_type"`
+	Symbol     string   `json:"symbol"`
+	Intervals  []string `json:"intervals"`
+	Immediate  bool     `json:"immediate"` // 是否立即执行
+}
+
 // ProbeResponse 心跳探测响应
 type ProbeResponse struct {
 	NodeID    string       `json:"node_id"`
