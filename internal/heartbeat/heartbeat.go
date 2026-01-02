@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/avast/retry-go"
+	"github.com/mooyang-code/data-collector/internal/collector"
 	"github.com/mooyang-code/data-collector/pkg/config"
 	"github.com/mooyang-code/data-collector/pkg/model"
 	"github.com/tencentyun/scf-go-lib/functioncontext"
@@ -45,7 +46,7 @@ func ScheduledHeartbeat(c context.Context, _ string) error {
 func ReportHeartbeat(ctx context.Context) error {
 	serverIP, serverPort := config.GetServerInfo()
 	nodeID, localVersion := config.GetNodeInfo()
-	log.InfoContextf(ctx, "ReportHeartbeat 开始: serverIP=%s:%d, nodeID=%s, version=%s", serverIP, serverPort, nodeID, localVersion)
+	log.DebugContextf(ctx, "ReportHeartbeat 开始: serverIP=%s:%d, nodeID=%s, version=%s", serverIP, serverPort, nodeID, localVersion)
 
 	// 检查NodeID是否配置
 	if nodeID == "" {
@@ -134,13 +135,17 @@ func buildPayloadInfo() (*model.HeartbeatPayload, error) {
 	// 获取节点指标
 	nodeMetrics := collectNodeMetrics()
 
+	// 获取已注册的采集器数据类型
+	supportedCollectors := collector.GetRegistry().GetDataTypes()
+
 	// 构建心跳负载
 	payload := &model.HeartbeatPayload{
-		NodeID:       nodeID,
-		NodeType:     "scf",
-		Timestamp:    time.Now(),
-		RunningTasks: []*model.TaskSummary{},
-		Metrics:      nodeMetrics,
+		NodeID:              nodeID,
+		NodeType:            "scf",
+		Timestamp:           time.Now(),
+		RunningTasks:        []*model.TaskSummary{},
+		Metrics:             nodeMetrics,
+		SupportedCollectors: supportedCollectors,
 		Metadata: map[string]interface{}{
 			"version":    version,
 			"go_version": runtime.Version(),
@@ -166,7 +171,7 @@ func collectNodeMetrics() *model.NodeMetrics {
 }
 
 func sendToServer(ctx context.Context, payload *model.HeartbeatPayload, serverIP string, serverPort int) (string, error) {
-	log.InfoContextf(ctx, "sending heartbeat, node_id: %s", payload.NodeID)
+	log.DebugContextf(ctx, "sending heartbeat, node_id: %s", payload.NodeID)
 	// 检查必要参数
 	if serverIP == "" || serverPort <= 0 {
 		return "", fmt.Errorf("invalid server address: %s:%d", serverIP, serverPort)
@@ -185,9 +190,10 @@ func executeReport(ctx context.Context, payload *model.HeartbeatPayload, serverI
 
 	// 构建请求体
 	apiPayload := map[string]interface{}{
-		"node_id":   payload.NodeID,
-		"node_type": payload.NodeType,
-		"metadata":  payload.Metadata,
+		"node_id":              payload.NodeID,
+		"node_type":            payload.NodeType,
+		"metadata":             payload.Metadata,
+		"supported_collectors": payload.SupportedCollectors,
 	}
 
 	// 序列化请求数据

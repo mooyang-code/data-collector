@@ -113,3 +113,19 @@ func InitLocalAppConfig() {
 		}
 	})
 }
+
+// GetServerURL 获取 Server API 地址
+func GetServerURL() string {
+	// 确保本地配置已初始化
+	if LocalAppConfig == nil {
+		InitLocalAppConfig()
+	}
+
+	localAppConfigMu.RLock()
+	defer localAppConfigMu.RUnlock()
+
+	if LocalAppConfig != nil && LocalAppConfig.System != nil {
+		return LocalAppConfig.System.ServerURL
+	}
+	return ""
+}

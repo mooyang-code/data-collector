@@ -104,3 +104,73 @@ type APIError struct {
 func (e *APIError) Error() string {
 	return fmt.Sprintf("币安API错误 [%d]: %s", e.Code, e.Message)
 }
+
+// ExchangeInfoResponse 交易所信息响应（现货和永续合约通用）
+type ExchangeInfoResponse struct {
+	Timezone   string          `json:"timezone"`
+	ServerTime int64           `json:"serverTime"`
+	Symbols    []SymbolInfoRaw `json:"symbols"`
+}
+
+// SymbolInfoRaw 交易对原始信息（币安格式）
+type SymbolInfoRaw struct {
+	Symbol             string        `json:"symbol"`              // 交易对符号（如 BTCUSDT）
+	Status             string        `json:"status"`              // 交易状态：TRADING, HALT, BREAK
+	BaseAsset          string        `json:"baseAsset"`           // 基础资产（如 BTC）
+	BaseAssetPrecision int           `json:"baseAssetPrecision"`  // 基础资产精度
+	QuoteAsset         string        `json:"quoteAsset"`          // 计价资产（如 USDT）
+	QuotePrecision     int           `json:"quotePrecision"`      // 计价资产精度
+	OrderTypes         []string      `json:"orderTypes"`          // 支持的订单类型
+	Filters            []FilterInfo  `json:"filters"`             // 交易规则过滤器
+	Permissions        []string      `json:"permissions"`         // 权限（SPOT/MARGIN等）
+	ContractType       string        `json:"contractType"`        // 合约类型（仅永续合约）：PERPETUAL
+	Pair               string        `json:"pair"`                // 交易对（仅永续合约）
+}
+
+// FilterInfo 交易规则过滤器
+type FilterInfo struct {
+	FilterType  string `json:"filterType"`  // PRICE_FILTER, LOT_SIZE, MIN_NOTIONAL等
+	MinPrice    string `json:"minPrice"`    // 最小价格
+	MaxPrice    string `json:"maxPrice"`    // 最大价格
+	TickSize    string `json:"tickSize"`    // 价格步长
+	MinQty      string `json:"minQty"`      // 最小数量
+	MaxQty      string `json:"maxQty"`      // 最大数量
+	StepSize    string `json:"stepSize"`    // 数量步长
+	MinNotional string `json:"minNotional"` // 最小名义价值
+}
+
+// ToSymbolInfo 转换为通用交易对信息
+func (s *SymbolInfoRaw) ToSymbolInfo() *exchange.SymbolInfo {
+	// 提取交易规则
+	var minQty, maxQty, tickSize, lotSize string
+	for _, filter := range s.Filters {
+		switch filter.FilterType {
+		case "LOT_SIZE":
+			minQty = filter.MinQty
+			maxQty = filter.MaxQty
+			lotSize = filter.StepSize
+		case "PRICE_FILTER":
+			tickSize = filter.TickSize
+		}
+	}
+
+	// 将 BTCUSDT 格式转换为 BTC-USDT
+	formattedSymbol := s.BaseAsset + "-" + s.QuoteAsset
+
+	// 映射状态
+	status := "active"
+	if s.Status != "TRADING" {
+		status = "inactive"
+	}
+
+	return &exchange.SymbolInfo{
+		Symbol:        formattedSymbol,
+		BaseAsset:     s.BaseAsset,
+		QuoteAsset:    s.QuoteAsset,
+		Status:        status,
+		MinQty:        minQty,
+		MaxQty:        maxQty,
+		TickSize:      tickSize,
+		LotSize:       lotSize,
+	}
+}

@@ -27,3 +27,15 @@ type Kline struct {
 	QuoteVolume common.Decimal // 成交额
 	TradeCount  int64          // 成交笔数
 }
+
+// SymbolInfo 交易对信息（通用格式）
+type SymbolInfo struct {
+	Symbol     string // 标的符号（BTC-USDT）
+	BaseAsset  string // 基础货币（BTC）
+	QuoteAsset string // 计价货币（USDT）
+	Status     string // 状态（active/inactive）
+	MinQty     string // 最小交易数量
+	MaxQty     string // 最大交易数量
+	TickSize   string // 价格最小变动单位
+	LotSize    string // 数量最小变动单位
+}

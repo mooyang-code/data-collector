@@ -15,8 +15,10 @@ const (
 
 // API 端点
 const (
-	SpotKlineEndpoint = "/api/v3/klines"  // 现货K线
-	SwapKlineEndpoint = "/fapi/v1/klines" // 永续合约K线
+	SpotKlineEndpoint       = "/api/v3/klines"        // 现货K线
+	SpotExchangeInfoEndpoint = "/api/v3/exchangeInfo" // 现货交易规则和交易对
+	SwapKlineEndpoint       = "/fapi/v1/klines"       // 永续合约K线
+	SwapExchangeInfoEndpoint = "/fapi/v1/exchangeInfo" // 永续合约交易规则和交易对
 )
 
 // Client 币安客户端

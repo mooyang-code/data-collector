@@ -96,3 +96,51 @@ func (api *SpotAPI) GetKline(ctx context.Context, req *exchange.KlineRequest) ([
 	}
 	return klines, nil
 }
+
+// GetExchangeInfo 获取现货交易所信息（交易规则和交易对）
+// API: GET https://api.binance.com/api/v3/exchangeInfo
+func (api *SpotAPI) GetExchangeInfo(ctx context.Context) ([]*exchange.SymbolInfo, error) {
+	var result ExchangeInfoResponse
+	var triedIPs []string
+
+	err := retry.Do(
+		func() error {
+			currentIP := dnsproxy.GetNextAvailableIP(SpotDomain, triedIPs)
+			if currentIP == "" {
+				log.WarnContextf(ctx, "[SpotAPI] 无可用IP获取ExchangeInfo，已尝试IP: %v", triedIPs)
+				return retry.Unrecoverable(fmt.Errorf("无可用IP访问 %s", SpotDomain))
+			}
+
+			err := api.client.GetWithIP(ctx, SpotDomain, SpotExchangeInfoEndpoint, nil, &result, currentIP)
+			if err != nil {
+				triedIPs = append(triedIPs, currentIP)
+				log.WarnContextf(ctx, "[SpotAPI] IP %s 获取ExchangeInfo失败，加入排除列表", currentIP)
+				return err
+			}
+			return nil
+		},
+		retry.Attempts(3),
+		retry.Delay(1*time.Second),
+		retry.LastErrorOnly(true),
+		retry.OnRetry(func(n uint, err error) {
+			log.WarnContextf(ctx, "[SpotAPI] 获取ExchangeInfo重试 #%d, err=%v", n+1, err)
+		}),
+		retry.Context(ctx),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("获取现货交易所信息失败: %w", err)
+	}
+
+	// 转换为通用格式
+	symbols := make([]*exchange.SymbolInfo, 0, len(result.Symbols))
+	for _, raw := range result.Symbols {
+		// 只包含状态为 TRADING 的交易对
+		if raw.Status == "TRADING" {
+			symbols = append(symbols, raw.ToSymbolInfo())
+		}
+	}
+
+	log.InfoContextf(ctx, "[SpotAPI] 获取ExchangeInfo成功，总计%d个交易对，活跃%d个",
+		len(result.Symbols), len(symbols))
+	return symbols, nil
+}

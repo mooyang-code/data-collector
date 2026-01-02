@@ -97,3 +97,51 @@ func (api *SwapAPI) GetKline(ctx context.Context, req *exchange.KlineRequest) ([
 
 	return klines, nil
 }
+
+// GetExchangeInfo 获取永续合约交易所信息（交易规则和交易对）
+// API: GET https://fapi.binance.com/fapi/v1/exchangeInfo
+func (api *SwapAPI) GetExchangeInfo(ctx context.Context) ([]*exchange.SymbolInfo, error) {
+	var result ExchangeInfoResponse
+	var triedIPs []string
+
+	err := retry.Do(
+		func() error {
+			currentIP := dnsproxy.GetNextAvailableIP(SwapDomain, triedIPs)
+			if currentIP == "" {
+				log.WarnContextf(ctx, "[SwapAPI] 无可用IP获取ExchangeInfo，已尝试IP: %v", triedIPs)
+				return retry.Unrecoverable(fmt.Errorf("无可用IP访问 %s", SwapDomain))
+			}
+
+			err := api.client.GetWithIP(ctx, SwapDomain, SwapExchangeInfoEndpoint, nil, &result, currentIP)
+			if err != nil {
+				triedIPs = append(triedIPs, currentIP)
+				log.WarnContextf(ctx, "[SwapAPI] IP %s 获取ExchangeInfo失败，加入排除列表", currentIP)
+				return err
+			}
+			return nil
+		},
+		retry.Attempts(3),
+		retry.Delay(1*time.Second),
+		retry.LastErrorOnly(true),
+		retry.OnRetry(func(n uint, err error) {
+			log.WarnContextf(ctx, "[SwapAPI] 获取ExchangeInfo重试 #%d, err=%v", n+1, err)
+		}),
+		retry.Context(ctx),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("获取永续合约交易所信息失败: %w", err)
+	}
+
+	// 转换为通用格式
+	symbols := make([]*exchange.SymbolInfo, 0, len(result.Symbols))
+	for _, raw := range result.Symbols {
+		// 只包含状态为 TRADING 且合约类型为 PERPETUAL 的交易对
+		if raw.Status == "TRADING" && raw.ContractType == "PERPETUAL" {
+			symbols = append(symbols, raw.ToSymbolInfo())
+		}
+	}
+
+	log.InfoContextf(ctx, "[SwapAPI] 获取ExchangeInfo成功，总计%d个交易对，活跃永续合约%d个",
+		len(result.Symbols), len(symbols))
+	return symbols, nil
+}

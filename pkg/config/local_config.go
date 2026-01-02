@@ -21,6 +21,7 @@ type SystemConfig struct {
 	Version     string `json:"version" yaml:"version"`
 	Environment string `json:"environment" yaml:"environment"`
 	Timezone    string `json:"timezone" yaml:"timezone"`
+	ServerURL   string `json:"server_url" yaml:"server_url"` // Server API 地址
 }
 
 // EventBusConfig 事件总线配置

@@ -115,12 +115,13 @@ type NodeMetrics struct {
 
 // HeartbeatPayload 心跳上报数据
 type HeartbeatPayload struct {
-	NodeID       string                 `json:"node_id"`
-	NodeType     string                 `json:"node_type"`
-	Timestamp    time.Time              `json:"timestamp"`
-	RunningTasks []*TaskSummary         `json:"running_tasks"`
-	Metrics      *NodeMetrics           `json:"metrics"`
-	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	NodeID              string                 `json:"node_id"`
+	NodeType            string                 `json:"node_type"`
+	Timestamp           time.Time              `json:"timestamp"`
+	RunningTasks        []*TaskSummary         `json:"running_tasks"`
+	Metrics             *NodeMetrics           `json:"metrics"`
+	Metadata            map[string]interface{} `json:"metadata,omitempty"`
+	SupportedCollectors []string               `json:"supported_collectors,omitempty"` // 支持的采集器数据类型
 }
 
 // CloudFunctionEvent 云函数事件
