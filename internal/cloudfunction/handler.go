@@ -60,34 +60,15 @@ func (h *CloudFunctionHandler) processCloudFunctionEvent(ctx context.Context, ev
 
 	// 根据事件类型处理
 	switch event.Action {
-	case model.EventActionConfig:
-		return h.handleConfig(ctx, event)
-
 	case model.EventActionTask:
 		return h.handleTask(ctx, event)
 
-	case model.EventActionHealth:
-		return h.handleHealth(ctx, event)
+	case model.EventActionKeepalive:
+		return h.handleKeepalive(ctx, event)
 
 	default:
 		return h.errorResponse("unknown_event_type", "unknown event Action: "+string(event.Action)), nil
 	}
-}
-
-// handleConfig 处理配置事件
-func (h *CloudFunctionHandler) handleConfig(ctx context.Context, event model.CloudFunctionEvent) (*model.Response, error) {
-	// TODO: 实现配置同步逻辑
-	log.Infof("处理配置事件, action: %s", event.Action)
-
-	return &model.Response{
-		Success: true,
-		Message: "config synchronized successfully",
-		Data: map[string]interface{}{
-			"action": event.Action,
-		},
-		RequestID: event.RequestID,
-		Timestamp: time.Now(),
-	}, nil
 }
 
 // handleTask 处理任务事件（服务端触发的任务立即执行）
@@ -146,34 +127,38 @@ func (h *CloudFunctionHandler) handleTask(ctx context.Context, event model.Cloud
 	}, nil
 }
 
-// handleHealth 处理健康检查事件（包括心跳探测功能）
-func (h *CloudFunctionHandler) handleHealth(ctx context.Context, event model.CloudFunctionEvent) (*model.Response, error) {
-	log.InfoContextf(ctx, "[handleHealth] 执行健康检查, source=%s, ServerIP=%s, ServerPort=%d",
+// handleKeepalive 处理保活探测事件（包括心跳探测功能）
+func (h *CloudFunctionHandler) handleKeepalive(ctx context.Context, event model.CloudFunctionEvent) (*model.Response, error) {
+	log.InfoContextf(ctx, "[handleKeepalive] 执行保活探测, source=%s, ServerIP=%s, ServerPort=%d",
 		event.Source, event.ServerIP, event.ServerPort)
 
 	// 处理心跳探测请求（服务端主动发送的探测）
-	if event.Source != "heartbeat_probe" {
-		// 不是moox后台来的心跳探测请求，直接进行普通健康检查
-		log.InfoContextf(ctx, "[handleHealth] 非探测请求，直接返回健康检查响应")
-		return h.buildHealthResponse(ctx, event)
+	if !isKeepaliveProbeSource(event.Source) {
+		// 不是moox后台来的保活探测请求，直接返回保活响应
+		log.InfoContextf(ctx, "[handleKeepalive] 非探测请求，直接返回保活响应")
+		return h.buildKeepaliveResponse(ctx, event)
 	}
 
 	// 调用函数式心跳模块处理探测请求
-	log.InfoContextf(ctx, "[handleHealth] 检测到探测请求，调用 ProcessProbe")
+	log.InfoContextf(ctx, "[handleKeepalive] 检测到探测请求，调用 ProcessProbe")
 	_, err := heartbeat.ProcessProbe(ctx, event)
 	if err != nil {
-		log.ErrorContextf(ctx, "[handleHealth] 处理心跳探测请求失败: %v", err)
-		// 探测处理失败不影响健康检查响应
+		log.ErrorContextf(ctx, "[handleKeepalive] 处理心跳探测请求失败: %v", err)
+		// 探测处理失败不影响保活响应
 	} else {
-		log.InfoContextf(ctx, "[handleHealth] ProcessProbe 执行成功")
+		log.InfoContextf(ctx, "[handleKeepalive] ProcessProbe 执行成功")
 	}
 
-	// 构建健康检查响应
-	return h.buildHealthResponse(ctx, event)
+	// 构建保活响应
+	return h.buildKeepaliveResponse(ctx, event)
 }
 
-// buildHealthResponse 构建健康检查响应
-func (h *CloudFunctionHandler) buildHealthResponse(ctx context.Context, event model.CloudFunctionEvent) (*model.Response, error) {
+func isKeepaliveProbeSource(source string) bool {
+	return source == "keepalive_probe" || source == "heartbeat_probe"
+}
+
+// buildKeepaliveResponse 构建保活响应
+func (h *CloudFunctionHandler) buildKeepaliveResponse(ctx context.Context, event model.CloudFunctionEvent) (*model.Response, error) {
 	// 从云函数上下文获取信息
 	funcCtx, _ := functioncontext.FromContext(ctx)
 
@@ -205,8 +190,8 @@ func (h *CloudFunctionHandler) buildHealthResponse(ctx context.Context, event mo
 		},
 	}
 
-	// 如果是心跳探测请求，使用探测源中的节点ID（优先级最高）
-	if event.Source == "heartbeat_probe" && event.Data != nil {
+	// 如果是保活探测请求，使用探测源中的节点ID（优先级最高）
+	if isKeepaliveProbeSource(event.Source) && event.Data != nil {
 		if probeNodeID, ok := event.Data["node_id"].(string); ok && probeNodeID != "" {
 			nodeInfo.NodeID = probeNodeID
 		}
@@ -214,11 +199,11 @@ func (h *CloudFunctionHandler) buildHealthResponse(ctx context.Context, event mo
 
 	return &model.Response{
 		Success: true,
-		Message: "cloud function is healthy",
+		Message: "keepalive ok",
 		Data: map[string]interface{}{
 			"node_info": nodeInfo,
 			"timestamp": time.Now(),
-			"status":    "healthy",
+			"status":    "keepalive",
 		},
 		RequestID: event.RequestID,
 		Timestamp: time.Now(),

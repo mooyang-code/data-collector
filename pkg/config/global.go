@@ -114,8 +114,8 @@ func InitLocalAppConfig() {
 	})
 }
 
-// GetServerURL 获取 Server API 地址
-func GetServerURL() string {
+// GetStorageURL 获取存储服务地址
+func GetStorageURL() string {
 	// 确保本地配置已初始化
 	if LocalAppConfig == nil {
 		InitLocalAppConfig()
@@ -125,7 +125,7 @@ func GetServerURL() string {
 	defer localAppConfigMu.RUnlock()
 
 	if LocalAppConfig != nil && LocalAppConfig.System != nil {
-		return LocalAppConfig.System.ServerURL
+		return LocalAppConfig.System.StorageURL
 	}
 	return ""
 }

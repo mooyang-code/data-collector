@@ -69,14 +69,14 @@ github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd h1:TRLaZ9cD/w
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
 github.com/modern-go/reflect2 v1.0.2 h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9Gz0M=
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
-github.com/mooyang-code/go-commlib/apicache v0.0.9 h1:Bb2mnOUDgJvYqWefnmw8zcXYJrHwh/Do+/BztESqvsA=
-github.com/mooyang-code/go-commlib/apicache v0.0.9/go.mod h1:Dat/ZI5fUFPChrzG87C6nnwrkl7wBZfInOxwLg2vozM=
 github.com/mooyang-code/go-commlib/open-wuji v0.0.1 h1:Eu447GG7MFxdYrkHVd2Ke0eEse3LU5wSvrCKxoiVl74=
 github.com/mooyang-code/go-commlib/open-wuji v0.0.1/go.mod h1:53dOgnaQov/svZ3rnwBG5iuF/MCNtA0jc6aYdezKnAY=
 github.com/mooyang-code/go-commlib/trpc-database/timer v0.0.2 h1:n5nI/+Jw9FRhGQBUZBXr5DLSZ9hHyCEYnGFrxI5ZGkc=
 github.com/mooyang-code/go-commlib/trpc-database/timer v0.0.2/go.mod h1:L8JbvCKwtHzPote6enLHEnS2NqyR3U9L1/v90xHjmb4=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e h1:fD57ERR4JtEqsWbfPhv4DMiApHyliiK5xCTNVSPiaAs=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
+github.com/orcaman/concurrent-map/v2 v2.0.1 h1:jOJ5Pg2w1oeB6PeDurIYf6k9PQ+aTITr/6lP/L/zp6c=
+github.com/orcaman/concurrent-map/v2 v2.0.1/go.mod h1:9Eq3TG2oBe5FirmYWQfYO5iH1q0Jv47PLaNK++uCdOM=
 github.com/panjf2000/ants/v2 v2.4.6 h1:drmj9mcygn2gawZ155dRbo+NfXEfAssjZNU1qoIb4gQ=
 github.com/panjf2000/ants/v2 v2.4.6/go.mod h1:f6F0NZVFsGCp5A7QW/Zj/m92atWwOkY0OIhFxRNFr4A=
 github.com/pierrec/lz4 v2.6.1+incompatible h1:9UY3+iC23yxF0UfGaYrGplQ+79Rg+h/q9FV9ix19jjM=

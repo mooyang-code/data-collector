@@ -38,9 +38,8 @@ const (
 type EventAction string
 
 const (
-	EventActionConfig EventAction = "config"
-	EventActionTask   EventAction = "task"
-	EventActionHealth EventAction = "health"
+	EventActionTask      EventAction = "task"
+	EventActionKeepalive EventAction = "keepalive"
 )
 
 // NodeStatus 节点状态
@@ -122,6 +121,7 @@ type HeartbeatPayload struct {
 	Metrics             *NodeMetrics           `json:"metrics"`
 	Metadata            map[string]interface{} `json:"metadata,omitempty"`
 	SupportedCollectors []string               `json:"supported_collectors,omitempty"` // 支持的采集器数据类型
+	TasksMD5            string                 `json:"tasks_md5"`                      // 当前任务列表MD5值
 }
 
 // CloudFunctionEvent 云函数事件

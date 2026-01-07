@@ -2,11 +2,9 @@ package bootstrap
 
 import (
 	"context"
-	"fmt"
 
 	_ "github.com/mooyang-code/data-collector/internal/collector/binance" // 注册 binance 采集器
 	"github.com/mooyang-code/data-collector/internal/dnsproxy"
-	"github.com/mooyang-code/data-collector/pkg/config"
 	"trpc.group/trpc-go/trpc-go/log"
 )
 
@@ -17,11 +15,8 @@ type Services struct{}
 func StartBackgroundServices(ctx context.Context) (*Services, error) {
 	log.Info("正在启动后台服务...")
 
-	// 1. 初始化缓存系统（缓存远端任务配置API的结果）
-	if err := initConfigCaches(); err != nil {
-		log.Errorf("初始化配置缓存系统失败: %v", err)
-		return nil, err
-	}
+	// 1. 初始化任务实例内存存储（已在config包的init中自动初始化）
+	log.Info("任务实例存储已初始化，将通过心跳回包自动更新")
 
 	// 2. 初始化 DNS 代理
 	if err := initDNSProxy(); err != nil {
@@ -31,29 +26,6 @@ func StartBackgroundServices(ctx context.Context) (*Services, error) {
 
 	log.Info("后台服务启动完成")
 	return &Services{}, nil
-}
-
-// initConfigCaches 初始化配置缓存系统
-func initConfigCaches() error {
-	log.Info("正在初始化缓存系统...")
-
-	// 创建任务实例缓存配置
-	taskInstanceCache := config.CollectorTaskInstanceCache{
-		AccessUrl: fmt.Sprintf("http://%s/gateway/collectmgr/GetTaskInstanceListInner", config.MooxServerServiceName),
-	}
-
-	// 初始化远程配置缓存系统
-	if err := config.InitCache(
-		map[string]string{
-			config.MooxServerServiceName: "", // 初始化的时候为空，没关系；后面服务端心跳探测会更新该映射
-		},
-		fmt.Sprintf("compass://%s", config.MooxServerServiceName),
-		taskInstanceCache); err != nil {
-		log.Errorf("初始化配置缓存失败: %v", err)
-		return err
-	}
-	log.Info("缓存系统初始化完成")
-	return nil
 }
 
 // initDNSProxy 初始化 DNS 代理

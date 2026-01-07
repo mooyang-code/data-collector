@@ -27,6 +27,23 @@ type ServerResponse struct {
 	Total   *int64 `json:"total,omitempty"`
 }
 
+// HeartbeatResponseData 心跳响应数据结构
+type HeartbeatResponseData struct {
+	PackageVersion string                 `json:"package_version"`  // 包版本信息
+	TaskInstances  []TaskInstanceResponse `json:"task_instances"`   // 任务实例列表
+	TasksMD5       string                 `json:"tasks_md5"`        // 服务端任务MD5值
+}
+
+// TaskInstanceResponse 任务实例响应结构
+type TaskInstanceResponse struct {
+	ID         int    `json:"ID"`
+	TaskID     string `json:"TaskID"`
+	RuleID     string `json:"RuleID"`
+	NodeID     string `json:"NodeID"`
+	TaskParams string `json:"TaskParams"`
+	Invalid    int    `json:"Invalid"`
+}
+
 // ScheduledHeartbeat 框架定时器入口函数 - 定时心跳
 func ScheduledHeartbeat(c context.Context, _ string) error {
 	ctx := trpc.CloneContext(c)
@@ -99,10 +116,6 @@ func ProcessProbe(ctx context.Context, event model.CloudFunctionEvent) (*model.R
 	if event.ServerIP != "" && event.ServerPort > 0 {
 		log.DebugContextf(ctx, "[ProcessProbe] 更新服务端地址 %s:%d", event.ServerIP, event.ServerPort)
 		config.UpdateServerInfo(event.ServerIP, event.ServerPort)
-		config.UpdateCompassMap(map[string]string{
-			config.MooxServerServiceName: fmt.Sprintf("%s:%d", event.ServerIP, event.ServerPort),
-		})
-
 		// 验证更新是否成功
 		verifyIP, verifyPort := config.GetServerInfo()
 		log.DebugContextf(ctx, "[ProcessProbe] 验证更新后的服务端地址: %s:%d", verifyIP, verifyPort)
@@ -138,6 +151,9 @@ func buildPayloadInfo() (*model.HeartbeatPayload, error) {
 	// 获取已注册的采集器数据类型
 	supportedCollectors := collector.GetRegistry().GetDataTypes()
 
+	// 获取当前任务MD5值
+	tasksMD5 := config.GetCurrentTasksMD5()
+
 	// 构建心跳负载
 	payload := &model.HeartbeatPayload{
 		NodeID:              nodeID,
@@ -146,6 +162,7 @@ func buildPayloadInfo() (*model.HeartbeatPayload, error) {
 		RunningTasks:        []*model.TaskSummary{},
 		Metrics:             nodeMetrics,
 		SupportedCollectors: supportedCollectors,
+		TasksMD5:            tasksMD5,
 		Metadata: map[string]interface{}{
 			"version":    version,
 			"go_version": runtime.Version(),
@@ -194,6 +211,7 @@ func executeReport(ctx context.Context, payload *model.HeartbeatPayload, serverI
 		"node_type":            payload.NodeType,
 		"metadata":             payload.Metadata,
 		"supported_collectors": payload.SupportedCollectors,
+		"tasks_md5":            payload.TasksMD5,
 	}
 
 	// 序列化请求数据
@@ -252,7 +270,7 @@ func sendSingleHeartbeat(ctx context.Context, url string, data []byte, httpClien
 	}
 
 	// 解析服务端响应
-	version, parseErr := parseServerResponse(respData)
+	version, parseErr := parseServerResponse(ctx, respData)
 	if parseErr != nil {
 		log.WarnContextf(ctx, "failed to parse server response: %v", parseErr)
 		return nil // 不影响心跳上报，只记录警告
@@ -261,8 +279,8 @@ func sendSingleHeartbeat(ctx context.Context, url string, data []byte, httpClien
 	return nil
 }
 
-// parseServerResponse 解析服务端响应，提取包版本信息
-func parseServerResponse(respData []byte) (string, error) {
+// parseServerResponse 解析服务端响应，提取包版本信息和任务实例
+func parseServerResponse(ctx context.Context, respData []byte) (string, error) {
 	var serverResp ServerResponse
 	if err := json.Unmarshal(respData, &serverResp); err != nil {
 		return "", fmt.Errorf("failed to parse server response: %w", err)
@@ -277,16 +295,62 @@ func parseServerResponse(respData []byte) (string, error) {
 		return "", nil // 返回空版本而不是错误
 	}
 
-	// 获取第一个数据元素并提取包版本
+	// 获取第一个数据元素
 	firstData := serverResp.Data[0]
-	if dataMap, ok := firstData.(map[string]interface{}); ok {
-		if packageVersion, exists := dataMap["package_version"]; exists {
-			if versionStr, ok := packageVersion.(string); ok {
-				return versionStr, nil
+	dataMap, ok := firstData.(map[string]interface{})
+	if !ok {
+		return "", nil
+	}
+
+	// 提取包版本
+	var packageVersion string
+	if pv, exists := dataMap["package_version"]; exists {
+		if versionStr, ok := pv.(string); ok {
+			packageVersion = versionStr
+		}
+	}
+
+	// 提取并处理任务实例列表
+	if taskInstances, exists := dataMap["task_instances"]; exists && taskInstances != nil {
+		// 将任务实例数据转换为JSON再解析
+		taskInstancesJSON, err := json.Marshal(taskInstances)
+		if err != nil {
+			log.WarnContextf(ctx, "failed to marshal task instances: %v", err)
+		} else {
+			var tasks []TaskInstanceResponse
+			if err := json.Unmarshal(taskInstancesJSON, &tasks); err != nil {
+				log.WarnContextf(ctx, "failed to unmarshal task instances: %v", err)
+			} else if len(tasks) > 0 {
+				// 更新任务实例到内存存储
+				log.InfoContextf(ctx, "[Heartbeat] 收到任务实例更新，任务数: %d", len(tasks))
+				updateTaskInstancesFromResponse(ctx, tasks)
+			} else {
+				log.DebugContextf(ctx, "[Heartbeat] 任务MD5匹配，无需更新")
 			}
 		}
 	}
-	return "", nil // 如果没有找到package_version字段，返回空字符串而不是错误
+
+	return packageVersion, nil
+}
+
+// updateTaskInstancesFromResponse 从响应中更新任务实例
+func updateTaskInstancesFromResponse(ctx context.Context, tasks []TaskInstanceResponse) {
+	// 转换为本地任务结构
+	localTasks := make([]*config.CollectorTaskInstanceCache, 0, len(tasks))
+	for _, task := range tasks {
+		localTasks = append(localTasks, &config.CollectorTaskInstanceCache{
+			ID:         task.ID,
+			TaskID:     task.TaskID,
+			RuleID:     task.RuleID,
+			NodeID:     task.NodeID,
+			TaskParams: task.TaskParams,
+			Invalid:    task.Invalid,
+		})
+	}
+
+	// 更新到内存存储
+	config.UpdateTaskInstances(localTasks)
+	log.InfoContextf(ctx, "[Heartbeat] 任务实例已更新到内存，当前MD5: %s", config.GetCurrentTasksMD5())
 }
 
 // BuildProbeResponseOptions 构建探测响应的选项

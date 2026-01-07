@@ -1,9 +1,10 @@
 # 主配置文件
 system:
   name: "multi-source-data-collector"
-  version: "v1.0.60"
+  version: "v1.0.70"
   environment: "Production"
   timezone: "UTC"
+  storage_url: "http://43.132.204.177:19104"
 
 # 事件总线配置
 event_bus:

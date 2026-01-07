@@ -1,8 +1,29 @@
 package config
 
-import "encoding/json"
+import (
+	"crypto/md5"
+	"encoding/hex"
+	"encoding/json"
+	"sort"
+	"strings"
+	"sync"
 
-const TBTaskInstance = "t_collector_task_instances"
+	cmap "github.com/orcaman/concurrent-map/v2"
+)
+
+var (
+	// taskInstanceStore 任务实例内存存储（使用concurrent-map保证并发安全）
+	taskInstanceStore cmap.ConcurrentMap[string, *CollectorTaskInstanceCache]
+	// currentTasksMD5 当前任务列表的MD5值
+	currentTasksMD5 string
+	// storeInitOnce 保证store只初始化一次
+	storeInitOnce sync.Once
+)
+
+// init 包初始化时自动初始化存储
+func init() {
+	InitTaskInstanceStore()
+}
 
 // CollectorTaskInstanceCache 采集任务实例缓存结构
 type CollectorTaskInstanceCache struct {
@@ -62,55 +83,86 @@ func (c *CollectorTaskInstanceCache) ParseTaskParams() error {
 	return nil
 }
 
-// SchemaID 实现接口APICacher
-func (CollectorTaskInstanceCache) SchemaID() string {
-	return TBTaskInstance
-}
-
-// URL 实现接口APICacher
-func (c CollectorTaskInstanceCache) URL() string {
-	return c.AccessUrl
-}
-
-// SearchFields 实现接口APICacher
-func (CollectorTaskInstanceCache) SearchFields() map[string]string {
-	return map[string]string{TBTaskInstance: "ID"}
-}
-
-// FilterKey 实现接口APICacher
-func (CollectorTaskInstanceCache) FilterKey() string {
-	return "Invalid=0"
-}
-
-// GetAllTaskInstanceList 获取所有采集任务实例缓存
-func GetAllTaskInstanceList() []*CollectorTaskInstanceCache {
-	instances, ok := GetAll(TBTaskInstance).([]*CollectorTaskInstanceCache)
-	if !ok {
-		return nil
-	}
-	// 解析每个实例的 TaskParams
-	for _, instance := range instances {
-		_ = instance.ParseTaskParams()
-	}
-	return instances
-}
-
 // GetTaskInstancesByNode 根据节点ID获取任务实例列表
 func GetTaskInstancesByNode(nodeID string) []*CollectorTaskInstanceCache {
+	return GetTaskInstancesByNodeFromStore(nodeID)
+}
+
+// ========== 新的任务实例内存存储方法 ==========
+
+// InitTaskInstanceStore 初始化任务实例存储
+func InitTaskInstanceStore() {
+	storeInitOnce.Do(func() {
+		taskInstanceStore = cmap.New[*CollectorTaskInstanceCache]()
+		currentTasksMD5 = ""
+	})
+}
+
+// UpdateTaskInstances 更新任务实例到内存存储
+func UpdateTaskInstances(tasks []*CollectorTaskInstanceCache) {
+	// 清空现有数据
+	taskInstanceStore.Clear()
+
+	// 写入新数据
+	for _, task := range tasks {
+		if task != nil && task.TaskID != "" {
+			// 解析任务参数
+			_ = task.ParseTaskParams()
+			taskInstanceStore.Set(task.TaskID, task)
+		}
+	}
+
+	// 更新MD5值
+	currentTasksMD5 = CalculateTasksMD5(tasks)
+}
+
+// GetTaskInstancesByNodeFromStore 从内存存储中获取指定节点的任务实例
+func GetTaskInstancesByNodeFromStore(nodeID string) []*CollectorTaskInstanceCache {
 	if nodeID == "" {
 		return nil
 	}
 
-	allInstances := GetAllTaskInstanceList()
-	if allInstances == nil {
-		return nil
+	var result []*CollectorTaskInstanceCache
+	taskInstanceStore.IterCb(func(key string, task *CollectorTaskInstanceCache) {
+		if task.NodeID == nodeID && task.Invalid == 0 {
+			result = append(result, task)
+		}
+	})
+
+	return result
+}
+
+// CalculateTasksMD5 计算任务列表的MD5值
+func CalculateTasksMD5(tasks []*CollectorTaskInstanceCache) string {
+	if len(tasks) == 0 {
+		return "empty"
 	}
 
-	var result []*CollectorTaskInstanceCache
-	for _, instance := range allInstances {
-		if instance.NodeID == nodeID {
-			result = append(result, instance)
+	// 提取所有有效任务的TaskID（过滤Invalid!=0的任务）
+	taskIDs := make([]string, 0, len(tasks))
+	for _, task := range tasks {
+		if task.Invalid == 0 {
+			taskIDs = append(taskIDs, task.TaskID)
 		}
 	}
-	return result
+
+	// 如果过滤后没有有效任务
+	if len(taskIDs) == 0 {
+		return "empty"
+	}
+
+	// 排序
+	sort.Strings(taskIDs)
+
+	// 拼接
+	combined := strings.Join(taskIDs, ",")
+
+	// 计算MD5
+	hash := md5.Sum([]byte(combined))
+	return hex.EncodeToString(hash[:])
+}
+
+// GetCurrentTasksMD5 获取当前任务MD5值
+func GetCurrentTasksMD5() string {
+	return currentTasksMD5
 }

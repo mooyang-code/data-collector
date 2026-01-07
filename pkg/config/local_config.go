@@ -21,7 +21,8 @@ type SystemConfig struct {
 	Version     string `json:"version" yaml:"version"`
 	Environment string `json:"environment" yaml:"environment"`
 	Timezone    string `json:"timezone" yaml:"timezone"`
-	ServerURL   string `json:"server_url" yaml:"server_url"` // Server API 地址
+	MooxServerURL string `json:"moox_server_url" yaml:"moox_server_url"` // Moox Server API 地址
+	StorageURL    string `json:"storage_url" yaml:"storage_url"`         // 存储服务地址 (如 http://127.0.0.1:19104)
 }
 
 // EventBusConfig 事件总线配置
