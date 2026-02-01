@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -28,31 +29,33 @@ func init() {
 // CollectorTaskInstanceCache 采集任务实例缓存结构
 type CollectorTaskInstanceCache struct {
 	// ID 主键ID
-	ID int `json:"ID"`
+	ID int `json:"id"`
 	// TaskID 任务唯一标识
-	TaskID string `json:"TaskID"`
+	TaskID string `json:"task_id"`
 	// RuleID 规则ID（关联配置表）
-	RuleID string `json:"RuleID"`
+	RuleID string `json:"rule_id"`
 	// NodeID 执行节点ID
-	NodeID string `json:"NodeID"`
+	NodeID string `json:"planned_exec_node"`
 	// TaskParams 任务执行参数（原始JSON字符串）
-	TaskParams string `json:"TaskParams"`
+	TaskParams string `json:"task_params"`
 	// Invalid 任务删除标记
-	Invalid int `json:"Invalid"`
+	Invalid int `json:"invalid"`
 	// AccessUrl 访问该表的接口url
 	AccessUrl string
 
 	// === 以下为 TaskParams 解析后的结构化字段 ===
 	// DataType 数据类型（如 kline, ticker, depth 等）
-	DataType string `json:"-"`
+	DataType string `json:"data_type,omitempty"`
 	// DataSource 数据源（如 binance, okx 等）
-	DataSource string `json:"-"`
+	DataSource string `json:"data_source,omitempty"`
 	// InstType 产品类型: SPOT(现货), SWAP(永续合约), FUTURES(交割合约)
-	InstType string `json:"-"`
+	InstType string `json:"inst_type,omitempty"`
 	// Symbol 交易对（如 BTC-USDT）
-	Symbol string `json:"-"`
+	Symbol string `json:"symbol,omitempty"`
+	// Interval 单一执行周期（心跳下发使用）
+	Interval string `json:"interval,omitempty"`
 	// Intervals K线周期列表（如 ["1m", "3m", "5m"]）
-	Intervals []string `json:"-"`
+	Intervals []string `json:"intervals,omitempty"`
 }
 
 // taskParamsJSON TaskParams 的 JSON 解析结构
@@ -72,6 +75,11 @@ func (c *CollectorTaskInstanceCache) ParseTaskParams() error {
 
 	var params taskParamsJSON
 	if err := json.Unmarshal([]byte(c.TaskParams), &params); err != nil {
+		// #region agent log
+		// 使用 fmt.Printf 输出到标准输出（会被日志系统捕获）
+		fmt.Printf("[DEBUG_AGENT] parse_task_params_error: taskID=%s, taskParams=%s, error=%v\n",
+			c.TaskID, c.TaskParams, err)
+		// #endregion
 		return err
 	}
 
@@ -80,6 +88,15 @@ func (c *CollectorTaskInstanceCache) ParseTaskParams() error {
 	c.InstType = params.InstType
 	c.Symbol = params.Symbol
 	c.Intervals = params.Intervals
+	if len(c.Intervals) == 0 && c.Interval != "" {
+		c.Intervals = []string{c.Interval}
+	}
+	
+	// #region agent log
+	fmt.Printf("[DEBUG_AGENT] parse_task_params_success: taskID=%s, symbol=%s, taskParams=%s\n",
+		c.TaskID, c.Symbol, c.TaskParams)
+	// #endregion
+	
 	return nil
 }
 
@@ -94,7 +111,7 @@ func GetTaskInstancesByNode(nodeID string) []*CollectorTaskInstanceCache {
 func InitTaskInstanceStore() {
 	storeInitOnce.Do(func() {
 		taskInstanceStore = cmap.New[*CollectorTaskInstanceCache]()
-		currentTasksMD5 = ""
+		currentTasksMD5 = "empty" // 初始值与计算逻辑保持一致
 	})
 }
 

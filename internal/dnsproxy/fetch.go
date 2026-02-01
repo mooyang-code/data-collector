@@ -32,80 +32,132 @@ type ServerDNSRecord struct {
 	Success   bool      `json:"success"`
 }
 
-// ScheduledFetchDNS 定时器入口函数 - 定时获取 DNS 记录
-func ScheduledFetchDNS(c context.Context, _ string) error {
+// ScheduledResolveDNS 定时器入口函数 - 定时解析 DNS 记录（先本地解析，失败则请求远端）
+func ScheduledResolveDNS(c context.Context, _ string) error {
 	ctx := trpc.CloneContext(c)
 	nodeID, version := config.GetNodeInfo()
-	log.WithContextFields(ctx, "func", "ScheduledFetchDNS", "version", version, "nodeID", nodeID)
+	log.WithContextFields(ctx, "func", "ScheduledResolveDNS", "version", version, "nodeID", nodeID)
 
-	log.DebugContext(ctx, "ScheduledFetchDNS Enter")
+	log.DebugContext(ctx, "ScheduledResolveDNS Enter")
 	if err := FetchDNSRecords(ctx); err != nil {
-		log.ErrorContextf(ctx, "scheduled fetch DNS failed: %v", err)
+		log.ErrorContextf(ctx, "scheduled resolve DNS failed: %v", err)
 		return err
 	}
-	log.DebugContext(ctx, "ScheduledFetchDNS Success")
+	log.DebugContext(ctx, "ScheduledResolveDNS Success")
 	return nil
 }
 
-// FetchDNSRecords 获取 DNS 记录
+// FetchDNSRecords 获取 DNS 记录（先本地解析，失败则请求远端）
 func FetchDNSRecords(ctx context.Context) error {
-	// 1. 获取服务端地址
-	serverIP, serverPort := config.GetServerInfo()
-	if serverIP == "" {
-		log.DebugContext(ctx, "no server IP configured, skipping DNS fetch")
+	// 1. 获取需要解析的域名列表
+	domains := getScheduledDomains()
+	if len(domains) == 0 {
+		log.DebugContext(ctx, "no domains configured for DNS resolution")
 		return nil
 	}
 
-	// 2. 构建请求 URL
+	log.InfoContextf(ctx, "[DNSProxy] 开始解析 %d 个域名", len(domains))
+
+	// 2. 存储所有解析结果
+	allRecords := make([]*DNSRecord, 0, len(domains))
+
+	// 3. 对每个域名进行处理
+	for _, domain := range domains {
+		record := resolveSingleDomain(ctx, domain)
+		if record != nil {
+			allRecords = append(allRecords, record)
+		}
+	}
+
+	log.InfoContextf(ctx, "[DNSProxy] 解析完成: 总数=%d", len(allRecords))
+
+	// 4. 更新全局 DNS 记录（用于 HTTP 请求和心跳上报）
+	updateDNSRecords(allRecords)
+
+	log.DebugContextf(ctx, "DNS records updated successfully, total: %d", len(allRecords))
+	return nil
+}
+
+// resolveSingleDomain 解析单个域名（先本地解析，失败则远端获取）
+func resolveSingleDomain(ctx context.Context, domain string) *DNSRecord {
+	// 1. 尝试本地解析
+	log.DebugContextf(ctx, "[DNSProxy] 开始本地解析域名: %s", domain)
+	localRecord, err := LocalResolveDomain(ctx, domain)
+	if err == nil && localRecord != nil && localRecord.Success {
+		log.InfoContextf(ctx, "[DNSProxy] 本地解析成功: domain=%s", domain)
+		return localRecord
+	}
+
+	// 2. 本地解析失败，降级到远端获取
+	log.WarnContextf(ctx, "[DNSProxy] 本地解析失败，降级到远端获取: domain=%s, error=%v", domain, err)
+	remoteRecord := fetchSingleDomainFromRemote(ctx, domain)
+	if remoteRecord != nil {
+		log.InfoContextf(ctx, "[DNSProxy] 远端获取成功: domain=%s", domain)
+		return remoteRecord
+	}
+
+	// 3. 远端获取也失败
+	log.ErrorContextf(ctx, "[DNSProxy] 域名解析完全失败（本地+远端）: domain=%s", domain)
+	return nil
+}
+
+// fetchSingleDomainFromRemote 从远端获取单个域名的 DNS 记录
+func fetchSingleDomainFromRemote(ctx context.Context, domain string) *DNSRecord {
+	// 获取服务端地址
+	serverIP, serverPort := config.GetServerInfo()
+	if serverIP == "" {
+		log.DebugContext(ctx, "no server IP configured, skipping remote DNS fetch")
+		return nil
+	}
+
+	// 构建请求 URL
 	url := fmt.Sprintf("http://%s:%d/gateway/dnsproxy/GetDNSRecordList", serverIP, serverPort)
 
-	// 3. 发送 HTTP 请求
+	// 发送 HTTP 请求
 	respData, err := fetchFromServer(ctx, url)
 	if err != nil {
-		return fmt.Errorf("failed to fetch DNS records: %w", err)
+		log.ErrorContextf(ctx, "[DNSProxy] 远端获取失败: %v", err)
+		return nil
 	}
 
-	// 4. 解析响应
+	// 解析响应
 	serverRecords, err := parseServerResponse(respData)
 	if err != nil {
-		return fmt.Errorf("failed to parse DNS response: %w", err)
+		log.ErrorContextf(ctx, "[DNSProxy] 解析远端响应失败: %v", err)
+		return nil
 	}
 
-	log.DebugContextf(ctx, "Fetched %d DNS records from server", len(serverRecords))
-
-	// 5. 对每个域名的 IP 列表进行探测和排序，转换为内部格式
-	records := make([]*DNSRecord, 0, len(serverRecords))
+	// 查找目标域名的记录
 	for _, srvRecord := range serverRecords {
-		// 从 best_ips 中解析 IP 列表
-		ips := parseBestIPs(srvRecord.BestIPs)
-		log.DebugContextf(ctx, "Domain %s has %d IPs to probe", srvRecord.Domain, len(ips))
+		if srvRecord.Domain == domain {
+			// 从 best_ips 中解析 IP 列表
+			ips := parseBestIPs(srvRecord.BestIPs)
+			log.DebugContextf(ctx, "[DNSProxy] 远端返回域名 %s 的 %d 个 IP", domain, len(ips))
 
-		// 调用 probeAndSort（传递域名，内部会查找探测配置）
-		ipList := probeAndSort(ctx, srvRecord.Domain, ips)
+			// 调用 probeAndSort（传递域名，内部会查找探测配置）
+			ipList := probeAndSort(ctx, domain, ips)
 
-		// 记录可用 IP 数量
-		availableCount := 0
-		for _, ip := range ipList {
-			if ip.Available {
-				availableCount++
+			// 记录可用 IP 数量
+			availableCount := 0
+			for _, ip := range ipList {
+				if ip.Available {
+					availableCount++
+				}
+			}
+			log.DebugContextf(ctx, "[DNSProxy] 远端域名 %s: %d/%d IPs available", domain, availableCount, len(ips))
+
+			// 创建 DNSRecord
+			return &DNSRecord{
+				Domain:    srvRecord.Domain,
+				IPList:    ipList,
+				ResolveAt: srvRecord.ResolveAt,
+				Success:   srvRecord.Success,
 			}
 		}
-		log.DebugContextf(ctx, "Domain %s: %d/%d IPs available", srvRecord.Domain, availableCount, len(ips))
-
-		// 创建 DNSRecord
-		record := &DNSRecord{
-			Domain:    srvRecord.Domain,
-			IPList:    ipList,
-			ResolveAt: srvRecord.ResolveAt,
-			Success:   srvRecord.Success,
-		}
-		records = append(records, record)
 	}
 
-	// 6. 更新全局变量
-	updateDNSRecords(records)
-
-	log.DebugContextf(ctx, "DNS records updated successfully, total: %d", len(records))
+	// 未找到该域名的记录
+	log.WarnContextf(ctx, "[DNSProxy] 远端未返回域名 %s 的记录", domain)
 	return nil
 }
 
@@ -191,4 +243,19 @@ func parseBestIPs(bestIPs string) []string {
 		}
 	}
 	return ips
+}
+
+// getScheduledDomains 获取需要定时解析的域名列表
+func getScheduledDomains() []string {
+	// 确保本地配置已初始化
+	if config.LocalAppConfig == nil {
+		config.InitLocalAppConfig()
+	}
+
+	// 如果没有 DNSProxy 配置，返回空列表
+	if config.LocalAppConfig.DNSProxy == nil {
+		return nil
+	}
+
+	return config.LocalAppConfig.DNSProxy.ScheduledDomains
 }

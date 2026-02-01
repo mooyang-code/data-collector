@@ -15,10 +15,10 @@ type IPInfo struct {
 
 // DNSRecord DNS 解析记录
 type DNSRecord struct {
-	Domain    string     `json:"domain"`     // 域名
-	IPList    []*IPInfo  `json:"ip_list"`    // IP 列表（已排序：可用的优先，延迟低的优先）
-	ResolveAt time.Time  `json:"resolve_at"` // 解析时间
-	Success   bool       `json:"success"`    // 解析是否成功
+	Domain    string    `json:"domain"`     // 域名
+	IPList    []*IPInfo `json:"ip_list"`    // IP 列表（已排序：可用的优先，延迟低的优先）
+	ResolveAt time.Time `json:"resolve_at"` // 解析时间
+	Success   bool      `json:"success"`    // 解析是否成功
 }
 
 // 全局变量（用 sync.RWMutex 保护）
@@ -124,3 +124,17 @@ func updateDNSRecords(records []*DNSRecord) {
 		dnsRecords[record.Domain] = record
 	}
 }
+
+// GetAllDNSRecords 获取所有 DNS 记录（用于心跳上报）
+func GetAllDNSRecords() map[string]*DNSRecord {
+	dnsMutex.RLock()
+	defer dnsMutex.RUnlock()
+
+	// 复制一份返回，避免外部修改
+	result := make(map[string]*DNSRecord, len(dnsRecords))
+	for domain, record := range dnsRecords {
+		result[domain] = record
+	}
+	return result
+}
+

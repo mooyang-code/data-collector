@@ -48,20 +48,44 @@ func ScheduledExecute(c context.Context, _ string) error {
 	// 获取本节点的任务配置
 	taskInstances := config.GetTaskInstancesByNode(nodeID)
 	if len(taskInstances) == 0 {
-		log.DebugContext(ctx, "没有需要执行的任务")
+		log.DebugContextf(ctx, "[ScheduledExecute] 没有需要执行的任务 (nodeID=%s)", nodeID)
 		return nil
 	}
 
-	log.InfoContextf(ctx, "开始执行采集任务，当前时间: %s, 任务数: %d", now.Format("15:04:05"), len(taskInstances))
+	// #region agent log
+	log.InfoContextf(ctx, "[DEBUG_AGENT] client_task_fetch: nodeID=%s, taskCount=%d, tasksMD5=%s, timestamp=%d",
+		nodeID, len(taskInstances), config.GetCurrentTasksMD5(), now.Unix())
+	// #endregion
+
+	log.InfoContextf(ctx, "[ScheduledExecute] 开始执行采集任务，当前时间: %s, 任务数: %d, nodeID=%s", 
+		now.Format("15:04:05"), len(taskInstances), nodeID)
+
+	// 打印所有任务信息
+	for i, task := range taskInstances {
+		// #region agent log
+		log.InfoContextf(ctx, "[DEBUG_AGENT] client_task_detail: nodeID=%s, taskIndex=%d, taskID=%s, symbol=%s, intervals=%v, taskParams=%s",
+			nodeID, i, task.TaskID, task.Symbol, task.Intervals, task.TaskParams)
+		// #endregion
+
+		log.InfoContextf(ctx, "[ScheduledExecute] Task[%d]: TaskID=%s, DataType=%s, DataSource=%s, Symbol=%s, Intervals=%v",
+			i, task.TaskID, task.DataType, task.DataSource, task.Symbol, task.Intervals)
+	}
 
 	// 收集所有需要执行的采集任务
 	var collectTasks []*collectTask
 	for _, taskInstance := range taskInstances {
 		// 为每个需要执行的 interval 创建一个采集任务
 		for _, interval := range taskInstance.Intervals {
-			if !shouldExecute(interval, now) {
+			shouldExec := shouldExecute(interval, now)
+			log.DebugContextf(ctx, "[ScheduledExecute] Check interval: symbol=%s, interval=%s, shouldExecute=%v",
+				taskInstance.Symbol, interval, shouldExec)
+			
+			if !shouldExec {
 				continue
 			}
+
+			log.InfoContextf(ctx, "[ScheduledExecute] Will execute: symbol=%s, interval=%s", 
+				taskInstance.Symbol, interval)
 
 			collectTasks = append(collectTasks, &collectTask{
 				TaskID:     taskInstance.TaskID,

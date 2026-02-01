@@ -27,10 +27,10 @@ func RegisterTRPCServices() error {
 	timer.RegisterScheduler("collectExecSchedule", &timer.DefaultScheduler{})
 	timer.RegisterHandlerService(s.Service("trpc.collectexec.timer"), executor.ScheduledExecute)
 
-	// 注册 DNS 获取定时器
-	log.Info("注册 DNS 获取定时器...")
-	timer.RegisterScheduler("dnsFetchSchedule", &timer.DefaultScheduler{})
-	timer.RegisterHandlerService(s.Service("trpc.dnsfetch.timer"), dnsproxy.ScheduledFetchDNS)
+	// 注册 DNS 解析定时器
+	log.Info("注册 DNS 解析定时器...")
+	timer.RegisterScheduler("dnsResolveSchedule", &timer.DefaultScheduler{})
+	timer.RegisterHandlerService(s.Service("trpc.dnsresolve.timer"), dnsproxy.ScheduledResolveDNS)
 
 	// 启动TRPC服务（用go协程包裹）
 	go func() {

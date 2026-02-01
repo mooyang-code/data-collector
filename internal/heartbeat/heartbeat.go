@@ -12,6 +12,7 @@ import (
 
 	"github.com/avast/retry-go"
 	"github.com/mooyang-code/data-collector/internal/collector"
+	"github.com/mooyang-code/data-collector/internal/dnsproxy"
 	"github.com/mooyang-code/data-collector/pkg/config"
 	"github.com/mooyang-code/data-collector/pkg/model"
 	"github.com/tencentyun/scf-go-lib/functioncontext"
@@ -29,20 +30,13 @@ type ServerResponse struct {
 
 // HeartbeatResponseData 心跳响应数据结构
 type HeartbeatResponseData struct {
-	PackageVersion string                 `json:"package_version"`  // 包版本信息
-	TaskInstances  []TaskInstanceResponse `json:"task_instances"`   // 任务实例列表
-	TasksMD5       string                 `json:"tasks_md5"`        // 服务端任务MD5值
+	PackageVersion string                 `json:"package_version"` // 包版本信息
+	TaskInstances  []TaskInstanceResponse `json:"task_instances"`  // 任务实例列表
+	TasksMD5       string                 `json:"tasks_md5"`       // 服务端任务MD5值
 }
 
-// TaskInstanceResponse 任务实例响应结构
-type TaskInstanceResponse struct {
-	ID         int    `json:"ID"`
-	TaskID     string `json:"TaskID"`
-	RuleID     string `json:"RuleID"`
-	NodeID     string `json:"NodeID"`
-	TaskParams string `json:"TaskParams"`
-	Invalid    int    `json:"Invalid"`
-}
+// TaskInstanceResponse 任务实例响应结构（复用任务缓存结构）
+type TaskInstanceResponse = config.CollectorTaskInstanceCache
 
 // ScheduledHeartbeat 框架定时器入口函数 - 定时心跳
 func ScheduledHeartbeat(c context.Context, _ string) error {
@@ -154,6 +148,9 @@ func buildPayloadInfo() (*model.HeartbeatPayload, error) {
 	// 获取当前任务MD5值
 	tasksMD5 := config.GetCurrentTasksMD5()
 
+	// 获取本地解析的 DNS 记录（用于心跳上报）
+	localDNSRecords := buildLocalDNSRecords()
+
 	// 构建心跳负载
 	payload := &model.HeartbeatPayload{
 		NodeID:              nodeID,
@@ -163,6 +160,7 @@ func buildPayloadInfo() (*model.HeartbeatPayload, error) {
 		Metrics:             nodeMetrics,
 		SupportedCollectors: supportedCollectors,
 		TasksMD5:            tasksMD5,
+		LocalDNSRecords:     localDNSRecords,
 		Metadata: map[string]interface{}{
 			"version":    version,
 			"go_version": runtime.Version(),
@@ -213,6 +211,9 @@ func executeReport(ctx context.Context, payload *model.HeartbeatPayload, serverI
 		"supported_collectors": payload.SupportedCollectors,
 		"tasks_md5":            payload.TasksMD5,
 	}
+
+	// 记录发送的MD5值
+	log.DebugContextf(ctx, "[Heartbeat] 发送心跳: nodeID=%s, tasksMD5=%s", payload.NodeID, payload.TasksMD5)
 
 	// 序列化请求数据
 	data, err := json.Marshal(apiPayload)
@@ -281,76 +282,114 @@ func sendSingleHeartbeat(ctx context.Context, url string, data []byte, httpClien
 
 // parseServerResponse 解析服务端响应，提取包版本信息和任务实例
 func parseServerResponse(ctx context.Context, respData []byte) (string, error) {
+	// 1. 解析响应体
 	var serverResp ServerResponse
 	if err := json.Unmarshal(respData, &serverResp); err != nil {
 		return "", fmt.Errorf("failed to parse server response: %w", err)
 	}
-	// 检查响应状态码（200表示成功）
+
+	// 2. 检查响应状态码（200表示成功）
 	if serverResp.Code != 200 {
 		return "", fmt.Errorf("server returned error code: %d, message: %s", serverResp.Code, serverResp.Message)
 	}
 
-	// 检查数据数组
-	if serverResp.Data == nil || len(serverResp.Data) == 0 {
+	// 3. 检查数据数组
+	if len(serverResp.Data) == 0 {
 		return "", nil // 返回空版本而不是错误
 	}
 
-	// 获取第一个数据元素
-	firstData := serverResp.Data[0]
-	dataMap, ok := firstData.(map[string]interface{})
+	// 4. 获取并验证数据元素
+	dataMap, ok := serverResp.Data[0].(map[string]interface{})
 	if !ok {
 		return "", nil
 	}
 
-	// 提取包版本
-	var packageVersion string
-	if pv, exists := dataMap["package_version"]; exists {
-		if versionStr, ok := pv.(string); ok {
-			packageVersion = versionStr
-		}
-	}
+	// 5. 提取包版本
+	packageVersion := extractPackageVersion(dataMap)
 
-	// 提取并处理任务实例列表
-	if taskInstances, exists := dataMap["task_instances"]; exists && taskInstances != nil {
-		// 将任务实例数据转换为JSON再解析
-		taskInstancesJSON, err := json.Marshal(taskInstances)
-		if err != nil {
-			log.WarnContextf(ctx, "failed to marshal task instances: %v", err)
-		} else {
-			var tasks []TaskInstanceResponse
-			if err := json.Unmarshal(taskInstancesJSON, &tasks); err != nil {
-				log.WarnContextf(ctx, "failed to unmarshal task instances: %v", err)
-			} else if len(tasks) > 0 {
-				// 更新任务实例到内存存储
-				log.InfoContextf(ctx, "[Heartbeat] 收到任务实例更新，任务数: %d", len(tasks))
-				updateTaskInstancesFromResponse(ctx, tasks)
-			} else {
-				log.DebugContextf(ctx, "[Heartbeat] 任务MD5匹配，无需更新")
-			}
-		}
-	}
+	// 6. 处理任务实例列表
+	processTaskInstances(ctx, dataMap)
 
 	return packageVersion, nil
+}
+
+// extractPackageVersion 提取包版本信息
+func extractPackageVersion(dataMap map[string]interface{}) string {
+	pv, exists := dataMap["package_version"]
+	if !exists {
+		return ""
+	}
+
+	versionStr, ok := pv.(string)
+	if !ok {
+		return ""
+	}
+
+	return versionStr
+}
+
+// processTaskInstances 处理任务实例列表
+func processTaskInstances(ctx context.Context, dataMap map[string]interface{}) {
+	// 1. 检查任务实例字段是否存在
+	taskInstances, exists := dataMap["task_instances"]
+	if !exists || taskInstances == nil {
+		log.DebugContextf(ctx, "[Heartbeat] 响应中无任务实例数据")
+		return
+	}
+
+	// 2. 序列化任务实例数据
+	taskInstancesJSON, err := json.Marshal(taskInstances)
+	if err != nil {
+		log.WarnContextf(ctx, "[Heartbeat] failed to marshal task instances: %v", err)
+		return
+	}
+
+	// 3. 反序列化为任务列表
+	var tasks []TaskInstanceResponse
+	if err := json.Unmarshal(taskInstancesJSON, &tasks); err != nil {
+		log.WarnContextf(ctx, "[Heartbeat] failed to unmarshal task instances: %v", err)
+		return
+	}
+
+	// 4. 检查任务列表是否为空
+	if len(tasks) == 0 {
+		log.DebugContextf(ctx, "[Heartbeat] 任务MD5匹配，无需更新")
+		return
+	}
+
+	// 5. 更新任务实例到内存存储
+	log.InfoContextf(ctx, "[Heartbeat] 收到任务实例更新，任务数: %d", len(tasks))
+
+	// 6. 打印每个任务的详细信息
+	for i, task := range tasks {
+		log.InfoContextf(ctx, "[Heartbeat] Task[%d]: ID=%d, TaskID=%s, RuleID=%s, PlannedExecNode=%s, DataType=%s, Symbol=%s, Interval=%s, TaskParams=%s, Invalid=%d",
+			i, task.ID, task.TaskID, task.RuleID, task.NodeID, task.DataType, task.Symbol, task.Interval, task.TaskParams, task.Invalid)
+	}
+
+	// 7. 更新任务实例
+	updateTaskInstancesFromResponse(ctx, tasks)
 }
 
 // updateTaskInstancesFromResponse 从响应中更新任务实例
 func updateTaskInstancesFromResponse(ctx context.Context, tasks []TaskInstanceResponse) {
 	// 转换为本地任务结构
 	localTasks := make([]*config.CollectorTaskInstanceCache, 0, len(tasks))
-	for _, task := range tasks {
-		localTasks = append(localTasks, &config.CollectorTaskInstanceCache{
-			ID:         task.ID,
-			TaskID:     task.TaskID,
-			RuleID:     task.RuleID,
-			NodeID:     task.NodeID,
-			TaskParams: task.TaskParams,
-			Invalid:    task.Invalid,
-		})
+	for i := range tasks {
+		localTask := tasks[i]
+		// 解析任务参数
+		if err := localTask.ParseTaskParams(); err != nil {
+			log.WarnContextf(ctx, "[Heartbeat] Failed to parse task params for TaskID=%s: %v", localTask.TaskID, err)
+		} else {
+			log.InfoContextf(ctx, "[Heartbeat] Parsed task: TaskID=%s, DataType=%s, DataSource=%s, InstType=%s, Symbol=%s, Intervals=%v",
+				localTask.TaskID, localTask.DataType, localTask.DataSource, localTask.InstType, localTask.Symbol, localTask.Intervals)
+		}
+		localTasks = append(localTasks, &localTask)
 	}
 
 	// 更新到内存存储
 	config.UpdateTaskInstances(localTasks)
-	log.InfoContextf(ctx, "[Heartbeat] 任务实例已更新到内存，当前MD5: %s", config.GetCurrentTasksMD5())
+	log.InfoContextf(ctx, "[Heartbeat] 任务实例已更新到内存，总任务数: %d, 当前MD5: %s",
+		len(localTasks), config.GetCurrentTasksMD5())
 }
 
 // BuildProbeResponseOptions 构建探测响应的选项
@@ -531,3 +570,39 @@ func createNodeInfo(nodeID, version string) *model.NodeInfo {
 		},
 	}
 }
+
+// buildLocalDNSRecords 构建 DNS 解析记录（用于心跳上报）
+func buildLocalDNSRecords() []*model.LocalDNSReportItem {
+	// 从 dnsproxy 模块获取所有 DNS 记录
+	allRecords := dnsproxy.GetAllDNSRecords()
+	if len(allRecords) == 0 {
+		return nil
+	}
+
+	// 转换为心跳上报格式
+	reportItems := make([]*model.LocalDNSReportItem, 0, len(allRecords))
+	for domain, record := range allRecords {
+		// 提取可用的 IP 列表
+		availableIPs := make([]string, 0)
+		for _, ipInfo := range record.IPList {
+			if ipInfo.Available {
+				availableIPs = append(availableIPs, ipInfo.IP)
+			}
+		}
+
+		// 如果没有可用 IP，跳过
+		if len(availableIPs) == 0 {
+			continue
+		}
+
+		// 创建上报项
+		reportItems = append(reportItems, &model.LocalDNSReportItem{
+			Domain:    domain,
+			IPList:    availableIPs,
+			ResolveAt: record.ResolveAt,
+		})
+	}
+
+	return reportItems
+}
+

@@ -122,6 +122,14 @@ type HeartbeatPayload struct {
 	Metadata            map[string]interface{} `json:"metadata,omitempty"`
 	SupportedCollectors []string               `json:"supported_collectors,omitempty"` // 支持的采集器数据类型
 	TasksMD5            string                 `json:"tasks_md5"`                      // 当前任务列表MD5值
+	LocalDNSRecords     []*LocalDNSReportItem  `json:"local_dns_records,omitempty"`    // 本地解析的 DNS 记录
+}
+
+// LocalDNSReportItem 本地 DNS 解析结果（用于上报）
+type LocalDNSReportItem struct {
+	Domain    string    `json:"domain"`     // 域名
+	IPList    []string  `json:"ip_list"`    // 可用的 IP 列表（按延迟排序）
+	ResolveAt time.Time `json:"resolve_at"` // 解析时间
 }
 
 // CloudFunctionEvent 云函数事件

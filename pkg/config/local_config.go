@@ -96,7 +96,11 @@ func loadConfigFile(cfg *AppConfig) error {
 
 // DNSProxyConfig DNS 代理配置
 type DNSProxyConfig struct {
-	ProbeConfigs []ProbeConfig `json:"probe_configs" yaml:"probe_configs"`
+	ProbeConfigs    []ProbeConfig `json:"probe_configs" yaml:"probe_configs"`       // 探测配置列表
+	DNSServers      []string      `json:"dns_servers" yaml:"dns_servers"`           // DNS 服务器列表，如 ["8.8.8.8", "1.1.1.1", "localhost"]
+	DNSTimeout      int           `json:"dns_timeout" yaml:"dns_timeout"`           // DNS 解析超时时间（秒），默认 5
+	ConcurrentLimit int           `json:"concurrent_limit" yaml:"concurrent_limit"` // 并发解析域名数，默认 10
+	ScheduledDomains []string     `json:"scheduled_domains" yaml:"scheduled_domains"` // 需要定时解析的域名列表
 }
 
 // ProbeConfig 探测配置

@@ -25,9 +25,10 @@ const (
 
 // ReportTaskStatusRequest 上报任务状态请求
 type ReportTaskStatusRequest struct {
-	ID     string `json:"id"`     // 任务实例ID（TaskID）
-	Status int    `json:"status"` // 状态码
-	Result string `json:"result"` // 执行结果（可选）
+	ID     string `json:"id"`      // 任务实例ID（TaskID）
+	NodeID string `json:"node_id"` // 执行节点ID
+	Status int    `json:"status"`  // 状态码
+	Result string `json:"result"`  // 执行结果（可选）
 }
 
 // ServerResponse 服务端响应结构
@@ -49,6 +50,7 @@ func ReportTaskStatusAsync(ctx context.Context, taskID string, status int, resul
 // ReportTaskStatus 上报任务状态到服务端
 func ReportTaskStatus(ctx context.Context, taskID string, status int, result string) error {
 	serverIP, serverPort := config.GetServerInfo()
+	nodeID, _ := config.GetNodeInfo()
 
 	// 检查服务端配置
 	if serverIP == "" || serverPort <= 0 {
@@ -62,19 +64,24 @@ func ReportTaskStatus(ctx context.Context, taskID string, status int, result str
 		return nil
 	}
 
-	log.DebugContextf(ctx, "开始上报任务状态: taskID=%s, status=%d, serverIP=%s:%d",
-		taskID, status, serverIP, serverPort)
+	if nodeID == "" {
+		return fmt.Errorf("node_id is required for task status report")
+	}
 
-	return executeReport(ctx, taskID, status, result, serverIP, serverPort)
+	log.DebugContextf(ctx, "开始上报任务状态: taskID=%s, nodeID=%s, status=%d, serverIP=%s:%d",
+		taskID, nodeID, status, serverIP, serverPort)
+
+	return executeReport(ctx, taskID, nodeID, status, result, serverIP, serverPort)
 }
 
 // executeReport 执行上报请求
-func executeReport(ctx context.Context, taskID string, status int, result string, serverIP string, serverPort int) error {
+func executeReport(ctx context.Context, taskID string, nodeID string, status int, result string, serverIP string, serverPort int) error {
 	url := fmt.Sprintf("http://%s:%d/gateway/collectmgr/ReportTaskStatus", serverIP, serverPort)
 
 	// 构建请求体
 	reqBody := &ReportTaskStatusRequest{
 		ID:     taskID,
+		NodeID: nodeID,
 		Status: status,
 		Result: result,
 	}
