@@ -1,7 +1,7 @@
 # 主配置文件
 system:
   name: "multi-source-data-collector"
-  version: "v1.0.78"
+  version: "v0.0.3"
   environment: "Production"
   timezone: "UTC"
   storage_url: "http://43.136.59.72:19104"
