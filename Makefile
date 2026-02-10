@@ -355,45 +355,73 @@ integration-test:
 test-all: test test-core test-model test-source test-storage perf-test integration-test
 	@echo "✅ 所有测试完成"
 
-# 云函数相关目标
+# SCF 框架 Python 模块路径
+SCF_FRAMEWORK_PYTHON := ../scf-framework/python
+
+# Python 环境要求: Python 3.9 (SCF 云函数运行环境)
+# 构建前请确保 pip3 可用，依赖会自动安装到打包目录内
+
+# 构建 SCF Web 云函数部署包
+# 用法: make build-scf v0.0.1
 build-scf:
 	@# 检查是否提供了版本号参数
 	@if [ -z "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
-		echo "❌ 错误: 请提供版本号参数"; \
+		echo "错误: 请提供版本号参数"; \
 		echo "使用方法: make build-scf v0.0.1"; \
 		exit 1; \
 	fi
-	@# 获取版本号参数（第一个非目标参数）
-	@SCF_VERSION="$(filter-out $@,$(MAKECMDGOALS))"; \
-	echo "📝 检查版本号格式: $$SCF_VERSION"; \
+	@set -e; \
+	SCF_VERSION="$(filter-out $@,$(MAKECMDGOALS))"; \
+	echo "检查版本号格式: $$SCF_VERSION"; \
 	if ! echo "$$SCF_VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
-		echo "❌ 错误: 版本号格式不正确"; \
+		echo "错误: 版本号格式不正确"; \
 		echo "正确格式: vx.x.x (例如: v0.0.1, v1.2.3)"; \
 		exit 1; \
 	fi; \
-	echo "✅ 版本号格式校验通过: $$SCF_VERSION"; \
-	echo "🔨 正在构建腾讯云函数版本..."; \
-	GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -o main ./cmd/serverless/main.go; \
-	echo "📁 准备云函数配置文件..."; \
-	mkdir -p scf-build; \
-	cp -r configs/* scf-build/; \
-	echo "📝 更新配置文件版本号..."; \
-	if [ -f "scf-build/config.yaml" ]; then \
-		sed -i.bak "s/version: \".*\"/version: \"$$SCF_VERSION\"/" scf-build/config.yaml; \
-		rm -f scf-build/config.yaml.bak; \
-		echo "✅ 配置文件版本号已更新为: $$SCF_VERSION"; \
-	else \
-		echo "⚠️  警告: config.yaml 文件不存在"; \
-	fi; \
-	sed -i.bak "s/version: \".*\"/version: \"$$SCF_VERSION\"/" configs/config.yaml; \
-	rm -f configs/config.yaml.bak; \
-	echo "✅ 源配置文件版本号已更新为: $$SCF_VERSION"; \
-	cp main scf-build/; \
-	echo "📦 打包云函数..."; \
-	cd scf-build && zip -r ../collector-scf-$$SCF_VERSION.zip main *.yaml; \
+	echo "版本号格式校验通过: $$SCF_VERSION"; \
+	\
+	echo "=== 清理旧的构建目录 ==="; \
 	rm -rf scf-build; \
-	rm -f main; \
-	echo "✅ 云函数构建完成: collector-scf-$$SCF_VERSION.zip"
+	mkdir -p scf-build/configs scf-build/plugin/scf_log; \
+	\
+	echo "=== 编译 Go 二进制 (linux/amd64) ==="; \
+	GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o scf-build/main ./cmd/serverless/main.go; \
+	\
+	echo "=== 复制配置文件 ==="; \
+	cp -r configs/* scf-build/configs/; \
+	if [ -f "scf-build/configs/config.yaml" ]; then \
+		sed -i.bak "s/version: \".*\"/version: \"$$SCF_VERSION\"/" scf-build/configs/config.yaml; \
+		rm -f scf-build/configs/config.yaml.bak; \
+		echo "配置文件版本号已更新为: $$SCF_VERSION"; \
+	fi; \
+	\
+	echo "=== 复制 Python 插件文件 ==="; \
+	cp plugin/*.py scf-build/plugin/; \
+	\
+	echo "=== 复制 scf_log 模块 ==="; \
+	cp $(SCF_FRAMEWORK_PYTHON)/scf_log/*.py scf-build/plugin/scf_log/; \
+	\
+	echo "=== 安装 Python 依赖到本地 (Python 3.9, linux x86_64) ==="; \
+	pip3 install tencentcloud-cls-sdk-python --no-deps \
+		-t scf-build/plugin/ --platform manylinux2014_x86_64 --python-version 3.9 \
+		--only-binary=:all: --quiet; \
+	pip3 install six requests "urllib3<2" "protobuf>=3.4.0,<4.0.0" "lz4==3.1.3" \
+		python-dateutil "python-snappy<=0.7.0" "pyyaml>=5.0" \
+		-t scf-build/plugin/ --platform manylinux2014_x86_64 --python-version 3.9 \
+		--only-binary=:all: --quiet; \
+	\
+	echo "=== 复制启动脚本 ==="; \
+	cp scf_bootstrap scf-build/; \
+	chmod 755 scf-build/scf_bootstrap; \
+	\
+	echo "=== 打包 zip ==="; \
+	cd scf-build && zip -r ../collector-scf-$$SCF_VERSION.zip . ; \
+	cd ..; \
+	\
+	echo "=== 清理构建目录 ==="; \
+	rm -rf scf-build; \
+	\
+	echo "构建完成: collector-scf-$$SCF_VERSION.zip"
 
 # 防止 Make 把版本号参数当作目标
 %:

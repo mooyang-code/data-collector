@@ -13,3 +13,5 @@ bin/
 .vscode/
 **/*.zip
 configs/trpc_go.yaml
+configs/config.yaml
+**/*.pyc

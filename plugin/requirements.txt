@@ -1,0 +1,2 @@
+# data-collector Python 插件
+# Python >= 3.10

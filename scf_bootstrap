@@ -1,0 +1,8 @@
+#!/bin/bash
+export PORT=9000
+
+# 启动 Python 数据采集插件（后台）
+/var/lang/python39/bin/python3.9 -u ./plugin/main.py &
+
+# 启动 Go 核心服务（前台，SCF 监控主进程）
+./main --conf ./configs/trpc_go.yaml

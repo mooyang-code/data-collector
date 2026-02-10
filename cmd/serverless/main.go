@@ -1,31 +1,59 @@
 package main
 
 import (
-	"context"
+	"log"
+	"os"
+	"time"
 
-	"github.com/mooyang-code/data-collector/internal/bootstrap"
-	"github.com/mooyang-code/data-collector/internal/cloudfunction"
-	"github.com/mooyang-code/data-collector/pkg/config"
-	"trpc.group/trpc-go/trpc-go/log"
+	"github.com/mooyang-code/scf-framework"
+	"github.com/mooyang-code/scf-framework/plugin"
+	"gopkg.in/yaml.v3"
+	"trpc.group/trpc-go/trpc-go"
 	_ "trpc.group/trpc-go/trpc-log-cls"
 )
 
-func main() {
-	// 创建默认启动器配置
-	cfg := config.DefaultConfig()
-
-	// 创建启动器
-	bs := bootstrap.New(cfg)
-
-	// 初始化启动器（统一初始化流程：配置加载 → 服务启动 → 服务注册 → 定时器注册）
-	if err := bs.Initialize(context.Background()); err != nil {
-		panic("failed to initialize bootstrap: " + err.Error())
+// loadSupportedCollectors 从 config.yaml 的 plugin.supported_collectors 读取支持的采集器类型列表。
+func loadSupportedCollectors(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		log.Fatalf("读取配置文件失败: %v", err)
 	}
 
-	// 注册并启动云函数(云函数在这里，只是起到心跳保持的作用)，
-	cloudfunction.RegisterCloudFunction()
+	var cfg struct {
+		Plugin struct {
+			SupportedCollectors []string `yaml:"supported_collectors"`
+		} `yaml:"plugin"`
+	}
 
-	// 保持运行
-	log.Info("数据采集器 启动完成")
-	select {}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		log.Fatalf("解析配置文件失败: %v", err)
+	}
+
+	if len(cfg.Plugin.SupportedCollectors) == 0 {
+		log.Fatalf("配置文件中 plugin.supported_collectors 为空")
+	}
+
+	return cfg.Plugin.SupportedCollectors
+}
+
+func main() {
+	collectors := loadSupportedCollectors("./configs/config.yaml")
+
+	p := plugin.NewHTTPPluginAdapter(
+		"data-collector",
+		"http://127.0.0.1:9001",
+		plugin.WithReadyTimeout(60*time.Second),
+		plugin.WithHeartbeatExtra(map[string]interface{}{
+			"supported_collectors": collectors,
+		}),
+	)
+
+	app := scf.New(p,
+		scf.WithConfigPath("./configs/config.yaml"),
+		scf.WithGatewayService("trpc.collector.gateway.stdhttp"),
+	)
+
+	if err := app.Run(trpc.BackgroundContext()); err != nil {
+		log.Fatalf("data-collector exited: %v", err)
+	}
 }

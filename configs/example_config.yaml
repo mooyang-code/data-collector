@@ -1,0 +1,60 @@
+# scf-framework 配置文件
+system:
+  name: "data-collector"
+  version: "v0.0.5"
+  env: "production"
+
+heartbeat:
+  interval: 9
+
+triggers:
+  - name: "scheduled-collect"
+    type: "timer"
+    settings:
+      cron: "0 * * * * * *"     # 每分钟整点触发采集（7字段：秒 分 时 日 月 周 年）
+
+# DNS 代理配置（框架层驱动，定时解析域名并注入 metadata）
+dns_proxy:
+  dns_servers:
+    - "8.8.8.8"
+    - "1.1.1.1"
+    - "localhost"
+  dns_timeout: 5
+  scheduled_domains:
+    - "api.binance.com"
+    - "fapi.binance.com"
+  probe_configs:
+    - domain: "api.binance.com"
+      probe_type: "https"
+      probe_api:
+        path: "/api/v3/time"
+        method: "GET"
+        timeout: 3
+        expected_status: 200
+    - domain: "fapi.binance.com"
+      probe_type: "https"
+      probe_api:
+        path: "/fapi/v1/ping"
+        method: "GET"
+        timeout: 3
+        expected_status: 200
+
+# 插件进程配置（透传给 Python 插件）
+plugin:
+  supported_collectors:        # 声明插件支持的采集器类型
+    - "kline"
+    - "symbol"
+  engine_url: "http://127.0.0.1:9001"
+  engine_timeout: 30
+  cls:
+    topic_id: ""              # CLS 日志主题 ID（必填）
+    host: "ap-guangzhou.cls.tencentcs.com"
+    secret_id: ""             # 腾讯云 SecretID（必填）
+    secret_key: ""                # 腾讯云 SecretKey（必填）
+    max_batch_count: 4096
+    linger_ms: 2000
+    retries: 10
+  sources:
+    market:
+      - name: "binance"
+        enabled: true
