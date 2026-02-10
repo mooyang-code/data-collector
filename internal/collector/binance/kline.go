@@ -163,7 +163,8 @@ func (c *KlineCollector) reportKlines(ctx context.Context, params *collector.Col
 		return err
 	}
 
-	dataRows, err := buildUpdateDataRows(klines)
+	// 将交易对作为 rowID 传递给 buildUpdateDataRows
+	dataRows, err := buildUpdateDataRows(klines, params.Symbol)
 	if err != nil {
 		return err
 	}
@@ -213,7 +214,7 @@ func normalizeFreq(interval string) (string, error) {
 	}
 }
 
-func buildUpdateDataRows(klines []*market.Kline) ([]UpdateDataRow, error) {
+func buildUpdateDataRows(klines []*market.Kline, symbol string) ([]UpdateDataRow, error) {
 	rows := make([]UpdateDataRow, 0, len(klines))
 	for _, kline := range klines {
 		openTime := formatKlineTime(kline.OpenTime)
@@ -319,9 +320,10 @@ func buildUpdateDataRows(klines []*market.Kline) ([]UpdateDataRow, error) {
 			},
 		}
 
+		// 使用交易对作为 rowID，时间作为 times
 		rows = append(rows, UpdateDataRow{
 			Times:  openTime,
-			RowID:  openTime,
+			RowID:  symbol, // 使用交易对作为 rowID
 			Fields: fields,
 		})
 	}
