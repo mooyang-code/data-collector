@@ -12,4 +12,3 @@ bin/
 .idea/
 .vscode/
 **/*.zip
-configs/trpc_go.yaml
